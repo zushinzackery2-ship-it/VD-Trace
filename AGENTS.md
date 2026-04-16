@@ -28,10 +28,6 @@
       - GUI / CLI 自测
       - `session_smoke`
       - `smoke_suite`
-  - 当前仓库推进：
-    - 新建仓库级 `.gitignore`
-    - 初始化 git 并绑定 `VehTrace`
-    - 只推进主线源码、文档、配置与必要脚本
 - 当前 live 主线仍只按 tracer 处理：
   - 继续盯“trace 才崩 / trace 卡顿 / 步数事件停滞”
   - `winhttp` 不回主线
@@ -90,6 +86,10 @@
 - `trigger_wait` / `decrypt_smoke` 已修正日志读取竞态：
   - 先收 recorder，再读日志
   - 避免 suite 内偶发空日志 / 半日志
+- 仓库已初始化并推进到 `VehTrace`：
+  - 新建了仓库级 `.gitignore`
+  - 已忽略构建产物 / 参考资料 / 旧仓 / 本地工具包
+  - `main` 已推到 GitHub 远端
 - 根目录无引用临时脚本与大残留已清掉：
   - `dump.cs`
   - `dump_example.bat`
