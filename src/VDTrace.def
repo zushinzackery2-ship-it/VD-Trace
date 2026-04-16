@@ -1,0 +1,16 @@
+LIBRARY VDTrace
+EXPORTS
+    vdtrace_event_kind_name
+    vdtrace_session_create
+    vdtrace_session_destroy
+    vdtrace_session_configure
+    vdtrace_session_start
+    vdtrace_session_stop
+    vdtrace_session_is_configured
+    vdtrace_session_is_running
+    vdtrace_session_event_count
+    vdtrace_text_recorder_create
+    vdtrace_text_recorder_destroy
+    vdtrace_text_recorder_is_open
+    vdtrace_text_recorder_callback
+    vdtrace_text_recorder_callback_ex

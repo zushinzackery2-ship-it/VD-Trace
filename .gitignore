@@ -1,0 +1,34 @@
+# Build outputs
+/bin/
+/obj/
+/.dotnet_cli_home/
+bin/
+obj/
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE and local workspace files
+/.vs/
+/.vscode/
+*.VC.db
+*.VC.opendb
+*.suo
+*.user
+
+# Generated logs, dumps, traces, temp artifacts
+*.log
+*.state
+*.dmp
+_codex_*
+_tmp_*
+
+# Legacy, backup, and reference material
+/backup/
+/ref_pic/
+/VD-Trace_old/
+
+# Large local tool bundles
+/tools/windbg-portable/
