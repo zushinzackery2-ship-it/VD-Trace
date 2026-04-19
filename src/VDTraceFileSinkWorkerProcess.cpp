@@ -14,25 +14,18 @@ namespace vdtrace
             {
                 {
                     std::unique_lock<std::mutex> lock(wake_lock);
-                    queue_cv.wait(
+                    worker_cv.wait(
                         lock,
                         [this]()
                         {
                             return stop_requested.load(std::memory_order_acquire)
-                                || read_index.load(std::memory_order_acquire) != write_index.load(std::memory_order_acquire)
-                                || dropped_events.load(std::memory_order_relaxed) != 0;
+                                || read_index.load(std::memory_order_acquire) != write_index.load(std::memory_order_acquire);
                         });
                 }
 
                 std::string write_batch;
                 write_batch.reserve(64 * 1024);
                 uint64_t write_batch_event_count = 0;
-
-                const uint64_t local_dropped = dropped_events.exchange(0, std::memory_order_relaxed);
-                if (local_dropped != 0)
-                {
-                    write_batch += FormatDroppedEventLine(local_dropped);
-                }
 
                 auto flush_write_batch = [&]()
                 {
@@ -202,10 +195,14 @@ namespace vdtrace
                     }
                 }
 
+                const size_t drained_read = read_index.load(std::memory_order_relaxed);
                 read_index.store(local_read, std::memory_order_release);
+                if (local_read != drained_read)
+                {
+                    producer_cv.notify_all();
+                }
                 if (stop_requested.load(std::memory_order_acquire)
-                    && local_read == write_index.load(std::memory_order_acquire)
-                    && dropped_events.load(std::memory_order_relaxed) == 0)
+                    && local_read == write_index.load(std::memory_order_acquire))
                 {
                     break;
                 }

@@ -48,7 +48,8 @@ namespace vdtrace
         HANDLE file = INVALID_HANDLE_VALUE;
         std::mutex file_write_lock;
         std::mutex wake_lock;
-        std::condition_variable queue_cv;
+        std::condition_variable worker_cv;
+        std::condition_variable producer_cv;
         std::mutex write_queue_lock;
         std::condition_variable write_queue_cv;
         std::deque<PendingWriteBatch> pending_write_batches;
@@ -73,7 +74,6 @@ namespace vdtrace
         std::atomic<bool> writer_active = false;
         std::atomic<size_t> read_index = 0;
         std::atomic<size_t> write_index = 0;
-        std::atomic<uint64_t> dropped_events = 0;
         std::atomic<uint64_t> total_dropped_events = 0;
         std::atomic<uint64_t> total_dropped_write_event_count = 0;
         std::atomic<bool> stop_requested = false;

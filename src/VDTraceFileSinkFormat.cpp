@@ -41,13 +41,6 @@ namespace vdtrace
         return queued;
     }
 
-    std::string FormatDroppedEventLine(uint64_t dropped_events)
-    {
-        std::ostringstream out;
-        out << "[vdtrace] dropped=" << dropped_events << "\n";
-        return out.str();
-    }
-
     std::string FormatRecorderEventLine(
         const RecorderQueuedEvent &event,
         uint64_t block_visit_count,

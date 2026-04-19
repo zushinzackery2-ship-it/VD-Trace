@@ -35,6 +35,7 @@ namespace session_smoke
             "scene-hot-loop-rootstop",
             "max-events",
             "write-accounting",
+            "write-accounting-pressure",
             "auto-thread-capture",
             "auto-thread-capture-delayed",
             "auto-thread-delayed-all-events",

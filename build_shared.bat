@@ -228,6 +228,7 @@ src\tests\session_smoke\session_smoke_cli.cpp ^
 src\tests\session_smoke\session_smoke_config.cpp ^
 src\tests\session_smoke\session_smoke_trace_cases_basic.cpp ^
 src\tests\session_smoke\session_smoke_trace_cases_features.cpp ^
+src\tests\session_smoke\session_smoke_trace_cases_recorder.cpp ^
 src\tests\session_smoke\session_smoke_thread_cases.cpp ^
 src\tests\session_smoke\vdtrace_session_smoke_test.cpp
 
@@ -241,6 +242,7 @@ obj\release\vdtrace_session_smoke\session_smoke_cli.obj ^
 obj\release\vdtrace_session_smoke\session_smoke_config.obj ^
 obj\release\vdtrace_session_smoke\session_smoke_trace_cases_basic.obj ^
 obj\release\vdtrace_session_smoke\session_smoke_trace_cases_features.obj ^
+obj\release\vdtrace_session_smoke\session_smoke_trace_cases_recorder.obj ^
 obj\release\vdtrace_session_smoke\session_smoke_thread_cases.obj ^
 obj\release\vdtrace_session_smoke\vdtrace_session_smoke_test.obj
 

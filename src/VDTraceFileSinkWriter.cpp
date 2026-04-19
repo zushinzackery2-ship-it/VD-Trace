@@ -18,7 +18,8 @@ namespace vdtrace
             impl.writer_active.store(false, std::memory_order_release);
             impl.stop_requested.store(true, std::memory_order_release);
             impl.writer_stop_requested.store(true, std::memory_order_release);
-            impl.queue_cv.notify_all();
+            impl.worker_cv.notify_all();
+            impl.producer_cv.notify_all();
             impl.write_queue_cv.notify_all();
         }
 

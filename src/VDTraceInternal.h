@@ -208,7 +208,6 @@ namespace vdtrace
     void PushEnhancedSamplingFrame(Session::Impl &impl, const EnhancedSamplingFrame &frame);
     void PopEnhancedSamplingFrame(Session::Impl &impl);
     RecorderQueuedEvent MakeRecorderQueuedEvent(const StepEvent &event);
-    std::string FormatDroppedEventLine(uint64_t dropped_events);
     void SnapshotExecutionSummary(Session::Impl &impl);
     void ClearExecutionSummary(Session::Impl &impl);
     void RefreshCurrentCallDepth(Session::Impl &impl);

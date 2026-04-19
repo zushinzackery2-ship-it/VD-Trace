@@ -20,14 +20,12 @@
     - 重复实现
     - 根目录临时产物
     - 旧语义文案残留
-  - 当前容量调整：
-    - 上游 recorder ring 准备从 `65536` 提升到 `655360`
-    - 目标是继续降低极端峰值下的 `dropped_events_total`
-    - 本轮仍按原链路验证：
-      - 编译
-      - GUI / CLI 自测
-      - `session_smoke`
-      - `smoke_suite`
+  - 本轮 recorder 零丢失主线已落地：
+    - 上游 recorder ring 已固定 `655360`
+    - 上游已改成“满了阻塞等待”，不再直接丢 ring 事件
+    - `worker / producer` 唤醒已拆开，避免共用条件变量时的误唤醒和串行退化
+    - 队列水位超过 `75%` 时自动切 `minimal_record`
+    - `session_smoke` 已补 `write-accounting-pressure`，直接压过 ring 容量验零丢失
 - 当前 live 主线仍只按 tracer 处理：
   - 继续盯“trace 才崩 / trace 卡顿 / 步数事件停滞”
   - `winhttp` 不回主线
@@ -82,6 +80,10 @@
   - `kRecorderRingCapacity` 已提升到 `655360`
   - `TraceCaseResult` 现在回传 recorder 侧统计，便于直接验写盘闭环
   - `session_smoke` 新增 `write-accounting` 回归，直接压 recorder 原始事件
+  - 上游 recorder ring 现已改成阻塞式背压，不再直接丢 ring 事件
+  - upstream `worker / producer` 唤醒已拆开，避免共用条件变量导致压力下串行退化
+  - 旧的 upstream dropped-line 僵尸逻辑已清掉
+  - `session_smoke` 新增 `write-accounting-pressure` 回归，直接压过 ring 容量
 - `same-level` 用例的旧式 `<=` 断言已改成当前 `ret` 反汇编断言
 - `trigger_wait` / `decrypt_smoke` 已修正日志读取竞态：
   - 先收 recorder，再读日志
@@ -167,6 +169,7 @@
   - `./build_core.bat`
   - `./build_shared.bat full`
   - `./bin/release/vdtrace_session_smoke_test.exe --full-core`
+  - `./bin/release/vdtrace_session_smoke_test.exe --case write-accounting-pressure`
   - `./run_python_gui.bat --self-test`
   - `./run_python_cli.bat self-test`
   - `./bin/release/vdtrace_smoke_suite_test.exe`

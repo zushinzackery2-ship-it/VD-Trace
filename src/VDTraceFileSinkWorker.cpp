@@ -3,6 +3,11 @@
 
 namespace vdtrace
 {
+    namespace
+    {
+        constexpr size_t kRecorderPressureWatermark = (kRecorderRingCapacity * 3) / 4;
+    }
+
     TextFileRecorder::Impl::Impl(const std::wstring &path, const Options &options)
         : static_reference_json_path(BuildStaticReferenceJsonPath(path))
     {
@@ -89,7 +94,8 @@ namespace vdtrace
     void TextFileRecorder::Impl::StopWorker()
     {
         stop_requested.store(true, std::memory_order_release);
-        queue_cv.notify_all();
+        worker_cv.notify_all();
+        producer_cv.notify_all();
         if (worker.joinable())
         {
             worker.join();
@@ -117,25 +123,40 @@ namespace vdtrace
             return;
         }
 
-        const RecorderQueuedEvent queued = MakeRecorderQueuedEvent(event);
-        const size_t write = write_index.load(std::memory_order_relaxed);
-        const size_t read = read_index.load(std::memory_order_acquire);
-        const size_t next = (write + 1) % kRecorderRingCapacity;
-        if (next == read)
+        RecorderQueuedEvent queued = MakeRecorderQueuedEvent(event);
+        std::unique_lock<std::mutex> lock(wake_lock);
+        for (;;)
         {
-            total_dropped_events.fetch_add(1, std::memory_order_relaxed);
-            if (dropped_events.fetch_add(1, std::memory_order_relaxed) == 0)
+            if (PendingEventCount() >= kRecorderPressureWatermark)
             {
-                queue_cv.notify_one();
+                queued.minimal_record = true;
             }
-            return;
-        }
 
-        ring[write] = queued;
-        write_index.store(next, std::memory_order_release);
-        if (write == read)
-        {
-            queue_cv.notify_one();
+            const size_t write = write_index.load(std::memory_order_relaxed);
+            const size_t read = read_index.load(std::memory_order_acquire);
+            const size_t next = (write + 1) % kRecorderRingCapacity;
+            if (next != read)
+            {
+                ring[write] = queued;
+                write_index.store(next, std::memory_order_release);
+                if (write == read)
+                {
+                    worker_cv.notify_one();
+                }
+                return;
+            }
+
+            producer_cv.wait(
+                lock,
+                [this]()
+                {
+                    return stop_requested.load(std::memory_order_acquire)
+                        || PendingEventCount() < (kRecorderRingCapacity - 1);
+                });
+            if (stop_requested.load(std::memory_order_acquire))
+            {
+                return;
+            }
         }
     }
 }

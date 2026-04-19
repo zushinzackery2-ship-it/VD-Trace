@@ -16,6 +16,7 @@ int wmain(int argc, wchar_t **argv)
     const session_smoke::SessionSmokeConfig config = session_smoke::BuildSessionSmokeConfig();
     session_smoke::RunSessionSmokeTraceBasicCases(selection, config);
     session_smoke::RunSessionSmokeTraceFeatureCases(selection, config);
+    session_smoke::RunSessionSmokeRecorderCases(selection);
     session_smoke::RunSessionSmokeThreadCases(selection, config);
 
     session_smoke::ShutdownEnvironment();

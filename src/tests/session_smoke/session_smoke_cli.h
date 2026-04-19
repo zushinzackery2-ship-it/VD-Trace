@@ -53,6 +53,7 @@ namespace session_smoke
     SessionSmokeConfig BuildSessionSmokeConfig();
     void RunSessionSmokeTraceBasicCases(const SessionSmokeSelection &selection, const SessionSmokeConfig &config);
     void RunSessionSmokeTraceFeatureCases(const SessionSmokeSelection &selection, const SessionSmokeConfig &config);
+    void RunSessionSmokeRecorderCases(const SessionSmokeSelection &selection);
     void RunSessionSmokeThreadCases(const SessionSmokeSelection &selection, const SessionSmokeConfig &config);
 }
 
