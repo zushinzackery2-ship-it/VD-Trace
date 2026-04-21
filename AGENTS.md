@@ -24,7 +24,7 @@
     - 上游 recorder ring 已固定 `655360`
     - 上游已改成“满了阻塞等待”，不再直接丢 ring 事件
     - `worker / producer` 唤醒已拆开，避免共用条件变量时的误唤醒和串行退化
-    - 队列水位超过 `75%` 时自动切 `minimal_record`
+    - 不额外注入自动 `minimal_record` 降级；保留原事件语义
     - `session_smoke` 已补 `write-accounting-pressure`，直接压过 ring 容量验零丢失
 - 当前 live 主线仍只按 tracer 处理：
   - 继续盯“trace 才崩 / trace 卡顿 / 步数事件停滞”
@@ -173,6 +173,9 @@
   - `./run_python_gui.bat --self-test`
   - `./run_python_cli.bat self-test`
   - `./bin/release/vdtrace_smoke_suite_test.exe`
+  - 本轮已复核：
+    - 不再自动注入 `minimal_record`
+    - `vdtrace_ctl.exe` / `vdtrace_agent_smoke_test.exe` 产物已恢复落盘
 
 ## 3. 经验 / 教训 / 高价值信息
 

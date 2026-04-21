@@ -3,11 +3,6 @@
 
 namespace vdtrace
 {
-    namespace
-    {
-        constexpr size_t kRecorderPressureWatermark = (kRecorderRingCapacity * 3) / 4;
-    }
-
     TextFileRecorder::Impl::Impl(const std::wstring &path, const Options &options)
         : static_reference_json_path(BuildStaticReferenceJsonPath(path))
     {
@@ -127,11 +122,6 @@ namespace vdtrace
         std::unique_lock<std::mutex> lock(wake_lock);
         for (;;)
         {
-            if (PendingEventCount() >= kRecorderPressureWatermark)
-            {
-                queued.minimal_record = true;
-            }
-
             const size_t write = write_index.load(std::memory_order_relaxed);
             const size_t read = read_index.load(std::memory_order_acquire);
             const size_t next = (write + 1) % kRecorderRingCapacity;
