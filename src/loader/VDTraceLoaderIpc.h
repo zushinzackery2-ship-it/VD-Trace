@@ -129,6 +129,8 @@ namespace VDTraceLoaderIpc
         return payloadSize == 0 || WriteAll(pipeHandle, payload, payloadSize);
     }
 
+    inline constexpr std::uint32_t kMaxMessageSize = 1 * 1024 * 1024;
+
     inline bool ReadMessage(HANDLE pipeHandle, std::vector<std::uint8_t> &buffer)
     {
         MessageHeader header = {};
@@ -137,7 +139,7 @@ namespace VDTraceLoaderIpc
             return false;
         }
 
-        if (header.magic != kMagic || header.size < sizeof(header))
+        if (header.magic != kMagic || header.size < sizeof(header) || header.size > kMaxMessageSize)
         {
             return false;
         }

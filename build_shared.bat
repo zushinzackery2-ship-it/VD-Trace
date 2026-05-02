@@ -356,10 +356,16 @@ if errorlevel 1 exit /b 1
 link /nologo /DLL /OUT:bin\release\VDTraceEndfieldBaseProxy.dll obj\release\vdtrace\pch.obj obj\release\vdtrace_early_loader\VDTraceEndfieldBaseProxy.obj
 if errorlevel 1 exit /b 1
 
-cl /nologo /std:c++17 /MT /EHsc /utf-8 /Iinclude /Isrc /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /DZYDIS_STATIC_BUILD /DZYCORE_STATIC_BUILD /Foobj\release\vdtrace_loader\\ /Fpobj\release\vdtrace\vdtrace.pch /Yu"pch.h" /c src\loader\WinHttpLoaderDllMain.cpp
+cl /nologo /std:c++17 /MT /EHsc /utf-8 /Iinclude /Isrc /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /DZYDIS_STATIC_BUILD /DZYCORE_STATIC_BUILD /Foobj\release\vdtrace_loader\\ /Fpobj\release\vdtrace\vdtrace.pch /Yu"pch.h" /c src\loader\WinHttpLoaderDllMain.cpp src\loader\VDTraceLoaderMemoryAccessCore.cpp src\loader\VDTraceLoaderMemoryAccessRequests.cpp src\loader\VDTraceLoaderMemoryShared.cpp src\loader\VDTraceLoaderMemoryServer.cpp
 if errorlevel 1 exit /b 1
 
-link /nologo /DLL /IGNORE:4222 /OUT:bin\release\winhttp.dll obj\release\vdtrace\pch.obj obj\release\vdtrace_loader\WinHttpLoaderDllMain.obj
+link /nologo /DLL /IGNORE:4222 /OUT:bin\release\winhttp.dll obj\release\vdtrace\pch.obj obj\release\vdtrace_loader\WinHttpLoaderDllMain.obj obj\release\vdtrace_loader\VDTraceLoaderMemoryAccessCore.obj obj\release\vdtrace_loader\VDTraceLoaderMemoryAccessRequests.obj obj\release\vdtrace_loader\VDTraceLoaderMemoryShared.obj obj\release\vdtrace_loader\VDTraceLoaderMemoryServer.obj Advapi32.lib
+if errorlevel 1 exit /b 1
+
+cl /nologo /std:c++17 /MT /EHsc /utf-8 /Iinclude /Isrc /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /DZYDIS_STATIC_BUILD /DZYCORE_STATIC_BUILD /Foobj\release\vdtrace_loader\\ /Fpobj\release\vdtrace\vdtrace.pch /Yu"pch.h" /c src\loader\VDTraceLoaderMemoryClient.cpp
+if errorlevel 1 exit /b 1
+
+link /nologo /SUBSYSTEM:CONSOLE /OUT:bin\release\vdtrace_memory_client.exe obj\release\vdtrace\pch.obj obj\release\vdtrace_loader\VDTraceLoaderMemoryClient.obj Advapi32.lib
 if errorlevel 1 exit /b 1
 
 copy /Y "%SYSTEM_WINHTTP%" "bin\release\winhttp_original.dll" >nul

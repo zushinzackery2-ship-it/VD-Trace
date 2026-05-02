@@ -9,4 +9,7 @@
 #endif
 
 #include "loader/winhttp_forward_exports.hpp"
+#include "loader/VDTraceLoaderIpcTransport.h"
+#include "loader/VDTraceLoaderIpcMemory.h"
+#include "loader/VDTraceLoaderMemoryRuntime.h"
 #include "loader/VDTraceLoaderRuntime.hpp"

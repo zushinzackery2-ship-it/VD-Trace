@@ -10,13 +10,15 @@
 #include <vector>
 
 #include "loader/VDTraceLoaderIpc.h"
+#include "loader/VDTraceLoaderMemoryRuntime.h"
 
 namespace VDTraceLoader
 {
     inline std::filesystem::path gRuntimeLogPath;
     inline std::atomic<bool> gStopRequested = false;
-    inline std::atomic<bool> gControllerRuntimeActive = false;
+    inline HANDLE gControllerStopEvent = nullptr;
     inline std::mutex gRuntimeLogMutex;
+    inline HANDLE gControllerThread = nullptr;
 
     inline std::string Narrow(const std::wstring &text)
     {
@@ -31,26 +33,32 @@ namespace VDTraceLoader
             return {};
         }
 
-        std::string result(static_cast<std::size_t>(count), '\0');
-        WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, result.data(), count, nullptr, nullptr);
-        if (!result.empty() && result.back() == '\0')
-        {
-            result.pop_back();
-        }
+        std::string result(static_cast<std::size_t>(count - 1), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, result.data(), count - 1, nullptr, nullptr);
         return result;
     }
 
     inline std::wstring GetProcessPath()
     {
         std::wstring buffer(MAX_PATH, L'\0');
-        const auto length = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
-        if (length == 0)
+        for (;;)
         {
-            return {};
+            const auto length = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+            if (length == 0)
+            {
+                return {};
+            }
+            if (length < buffer.size())
+            {
+                buffer.resize(length);
+                return buffer;
+            }
+            if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+            {
+                return {};
+            }
+            buffer.resize(buffer.size() * 2);
         }
-
-        buffer.resize(length);
-        return buffer;
     }
 
     inline bool EqualsInsensitive(std::wstring_view left, std::wstring_view right)
@@ -125,6 +133,17 @@ namespace VDTraceLoader
         pipeHandle = INVALID_HANDLE_VALUE;
     }
 
+    inline bool WaitForControllerStop(DWORD timeoutMs)
+    {
+        if (gControllerStopEvent == nullptr)
+        {
+            return gStopRequested.load();
+        }
+
+        const DWORD waitResult = WaitForSingleObject(gControllerStopEvent, timeoutMs);
+        return waitResult == WAIT_OBJECT_0 || gStopRequested.load();
+    }
+
     inline bool SendControllerLog(HANDLE pipeHandle, const char *text)
     {
         return VDTraceLoaderIpc::SendAgentLog(pipeHandle, GetCurrentProcessId(), text);
@@ -197,7 +216,10 @@ namespace VDTraceLoader
                     lastWaitLogTick = now;
                 }
 
-                Sleep(1000);
+                if (WaitForControllerStop(1000))
+                {
+                    break;
+                }
                 continue;
             }
 
@@ -224,7 +246,10 @@ namespace VDTraceLoader
 
             AppendRuntimeLog("Controller disconnected");
             CloseClientPipe(pipeHandle);
-            Sleep(1000);
+            if (WaitForControllerStop(1000))
+            {
+                break;
+            }
         }
 
         AppendRuntimeLog("Controller thread exiting");
@@ -249,6 +274,22 @@ namespace VDTraceLoader
             gRuntimeLogPath = modulePath.parent_path() / L"vdtrace_loader_runtime_log.txt";
             AppendRuntimeLog("DllMain attach");
 
+            if (gControllerStopEvent == nullptr)
+            {
+                gControllerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+                if (gControllerStopEvent == nullptr)
+                {
+                    AppendRuntimeLog("CreateEventW failed for controller stop event, error = " + std::to_string(GetLastError()));
+                    return TRUE;
+                }
+            }
+            else
+            {
+                ResetEvent(gControllerStopEvent);
+            }
+
+            StartMemoryIpcRuntime();
+
             const auto thread = CreateThread(nullptr, 0, &ControllerThread, nullptr, 0, nullptr);
             if (thread == nullptr)
             {
@@ -256,16 +297,22 @@ namespace VDTraceLoader
                 return TRUE;
             }
 
-            gControllerRuntimeActive = true;
-            CloseHandle(thread);
+            gControllerThread = thread;
         }
         else if (reason == DLL_PROCESS_DETACH)
         {
-            if (gControllerRuntimeActive.load())
+            gStopRequested = true;
+            if (gControllerStopEvent != nullptr)
             {
-                gStopRequested = true;
-                gControllerRuntimeActive = false;
+                SetEvent(gControllerStopEvent);
             }
+            if (gControllerThread != nullptr)
+            {
+                WaitForSingleObject(gControllerThread, 5000);
+                CloseHandle(gControllerThread);
+                gControllerThread = nullptr;
+            }
+            StopMemoryIpcRuntime();
         }
 
         return TRUE;
