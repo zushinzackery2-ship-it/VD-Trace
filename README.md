@@ -1,324 +1,192 @@
+<div align="center">
+
 # VD-Trace
 
-独立的 `DR 主后端 + TF 辅助回退` 控制流 Trace 支持库，主线工作流以 `autostart + BepInEx plugin` 和直接注入为准；`winhttp.dll` 在线会话只保留兼容用途，不再作为默认入口。
+**Windows x64 Runtime Control-Flow Trace Framework**
 
-当前能力：
+*Hardware breakpoint-driven tracing | DR primary + TF fallback | Ring-buffer async recorder*
 
-- `DR` 硬件观察为主、`TF` 只在必要时补探测
-- 指定模块过滤
-- 可选整线程追踪
-- 运行中 `Start / Stop`
-- `max_events`
-- `control_flow_only`
-- `max_call_depth`（默认层级；`all` / 浅层 / 同层）
-- `depth_filter_spec`（按模块 / 匿名执行页 / 模块外区域覆盖默认层级与执行模式）
-- `hit_policy`（首次边 / 每次命中）
-- `hot_bypass_threshold`（首次命中模式下的空转跳出阈值；默认 32，0 关闭）
-- `enhanced_sampling`（跨模块 `call/return` 额外抓缓冲区前后快照）
-- `trigger_point`（命中地址后开始 Trace）
-- `auto_select_thread`（内核选项；GUI 里勾上“自动线程捕获”且开启“定点触发”时映射到它）
-- `block_main_thread`（内核选项；GUI 里勾上“屏蔽主线程”时映射到它）
-- `probe_spec`（命中指定地址时额外抓寄存器/内存值，支持块内普通指令地址）
-- `stop_on_root_return`（返回根层后自动停）
-- 静态引用伴生导出：`*.static_refs.json`
-- 线程创建 API 自动跨线程接力（`CreateThread` / `CreateRemoteThread(Ex)` / `_beginthreadex` / `NtCreateThreadEx`）
-- 已知异步投递 API 线索还原（`QueueUserWorkItem` / APC / 线程池）
-- 原始边日志 + `frida-trace` 风格 enter/leave 输出
-- 后台线程首次命中函数预览与反汇编
-- C++ API / C API
-- 轻量环形队列 + 异步文本文件记录器
-- `VDTraceAgent.dll` IPC Agent
-- 兼容保留的 `winhttp.dll` Loader 在线会话
-- `run_python_cli.bat` 共享配置的 Python CLI 控制端
-- `vdtrace_ctl.exe` 原始 IPC CLI 作为低层备用路径
-- GUI / CLI 内存读写
-- Agent 内部模块 dump + PE 修正输出
+![C++](https://img.shields.io/badge/C%2B%2B-20-blue?style=flat-square)
+![Platform](https://img.shields.io/badge/Platform-Windows%20x64-lightgrey?style=flat-square)
+![Toolchain](https://img.shields.io/badge/Toolchain-Visual%20Studio%202022-green?style=flat-square)
+![Disasm](https://img.shields.io/badge/Disassembler-Zydis-orange?style=flat-square)
 
-当前限制：
+</div>
 
-- 目前一进程只支持一个活动 Trace 会话
-- 间接 `call/jmp` 只做基础分类，不保证总能还原目标地址
-- 回调运行在异常处理路径里，回调逻辑必须尽量轻
+---
 
-控制流模式下：
+> [!NOTE]
+> **当前定位**
+> VD-Trace 以硬件调试寄存器（DR0-DR3）为主后端，在基本块粒度上捕获控制流边；仅在匿名执行页、深度过滤 TF 区域或探针单步场景下临时切入 Trap Flag 模式。
+> 主线工作流为 `autostart + BepInEx plugin` 直接注入；`winhttp.dll` 在线会话仅保留兼容用途。
 
-- `max_call_depth=all`：保持旧行为，持续跟进内部调用
-- `max_call_depth=0` 或 GUI 填 `single`：只看当前层控制流，内部 `call` 只记边，不主动进入 callee
-- `max_call_depth=1/2/...`：只跟进指定层数，适合看浅层业务流程
-- `depthfilter=outside=<n>[:edge|tf],anon=<n>[:edge|tf],module=<name>:<n>[:edge|tf]`：给模块外区域、匿名执行页或指定模块单独覆盖默认层级；`TF` 会在该区域局部展开正文
-- `hit_policy=first`：同一条边只输出首次命中
-- `hit_policy=every`：每次命中都输出，适合看循环热点和重复调用
-- `hit_policy=first` 下，重复 `jcc` 热循环会自动切到热旁路：
-  优先等循环退出边，函数返回只做兜底，避免 `UnityPlayer` 这类大块累加/校验循环把 `steps` 打爆
-- `idleescape=<n>`：首次命中模式下，热点空转累计到阈值后改盯退出边/返回点；默认 32，`0` 关闭
-- 系统模块调用固定只记录边，不主动进入内部
-- 非系统外部模块只有在开启 `trace_outside_modules` 或显式命中模块层级规则时才会继续跟进；关闭时固定只记边，不主动进入内部
-- 匿名可执行页可以按匿名页层级规则继续做最小化跟进，不会因为普通外部模块只记边就一起被关掉
-- `trigger=<0x地址>`：命中绝对地址后才正式开始 Trace
-- `trigger=<模块!0xRVA>`：命中指定模块内 RVA 后才正式开始 Trace
-- `rootstop`：从触发点开始只看这一次调用子树，回到根层 `return` 后自动停
+---
 
-默认 recorder 现在改成轻量环形队列 + 异步落盘：异常路径里只写固定大小事件到预分配队列，后台线程负责格式化、地址标注、异步 API 识别和写文件。高频 Trace 时更稳，但如果写入速度明显追不上采样速度，会在日志里额外写一条 `[vdtrace] dropped=<n>`。
+## 功能概览
 
-`enhanced_sampling` 默认关闭，只在跨模块 `call/return` 这种稀有路径上额外抓固定小块内存快照。VEH 里只做快判 + 固定字节复制，真正的对比展示仍然放后台线程，所以不会把重格式化逻辑塞回异常处理路径。
+| 功能 | 说明 |
+|:-----|:-----|
+| **DR 基本块追踪** | 在基本块尾部的控制流指令处设置硬件执行断点，每个基本块仅触发一次 VEH 异常 |
+| **TF 局部回退** | 匿名页 / 深度过滤 TF 区域 / 探针 step 模式下临时切入单步，退出后自动恢复 DR |
+| **深度过滤** | `depth_filter_spec` 支持模块外、匿名执行页、指定模块三级独立层级与执行模式覆盖 |
+| **热旁路逃逸** | `hot_bypass_threshold` 识别热点循环后 DR 重编程至退出点，避免日志爆炸 |
+| **触发点** | `trigger_point` 支持绝对地址 / `module!RVA`，命中后才正式开始追踪 |
+| **线程自动捕获** | 所有线程同时挂载 DR，首个命中线程通过原子竞争晋升为追踪目标 |
+| **异步线程接力** | 检测 `CreateThread` / `_beginthreadex` 等 API 后自动切换到新线程继续追踪 |
+| **探针观测** | `probe_spec` 支持 Capture（截获寄存器/内存）、Step（TF 步进）、Write（缓冲区变化监控）三种模式 |
+| **增强采样** | 跨模块 call/return 时自动抓取参数缓冲区 before/after 快照并 diff 输出 |
+| **静态引用分析** | 基本块内 RIP-relative 内存引用自动解析为 `.data/.rdata` 槽位映射，伴生 `*.static_refs.json` |
+| **环形队列 + 异步落盘** | 65 万级预分配 Ring Buffer + Worker 格式化线程 + Writer 写盘线程，三级流水线背压控制 |
+| **IPC Agent** | `VDTraceAgent.dll` 注入目标进程后通过命名管道提供 configure / start / stop / modules / dump / memory R/W 服务 |
+| **运行时 PE 修正** | Agent 内置 Dump+Fix，修正节表偏移并清除无效 Security 目录，输出可被 IDA 直接加载的 PE |
+| **frida-trace 风格输出** | 缩进 call/return 调用树 + 参数/返回值内存预览 + 首次命中函数反汇编预览 |
 
-线程接力也走后台工作线程：VEH 里只做轻量排队和状态切换，不在异常处理路径里阻塞等新线程起来。
+---
 
-`probe_spec` 也是按这个思路接的：异常路径里只做“命中 probe 地址 -> 拷固定小块值 -> 发事件”，真正的格式化和文本输出仍然在后台线程。
+## 核心架构
 
-这轮 VEH 热路径还继续收了几刀：
+### 异常驱动模型 (VEH Pipeline)
 
-- VEH 入口的活动 session 读取改成原子指针，不再每次异常先抢全局互斥锁
-- recorder 只在队列从空变非空时唤醒后台线程，不再每条事件都 `notify_one`
-- 模块范围查找改成按基址排序后的二分查找
-- 停止 trace 时，不再同步清理所有 waiting capture 线程的 DR；改成登记 stale capture，等它下次撞到旧触发点时在 VEH 里就地清掉，避免 Stop 卡死
+系统完全构建于 Windows VEH（Vectored Exception Handling）之上：
 
-日志现在有三层：
+- **VEH 入口**：`AddVectoredExceptionHandler(1, ...)` 注册最高优先级 handler，分发 `EXCEPTION_SINGLE_STEP` 异常
+- **无锁 Session 定位**：`std::atomic<Session::Impl*> g_active_impl` 原子指针，VEH 热路径零 mutex
+- **指令分类**：Zydis 反汇编引擎将指令映射为 Call / Jump / ConditionalJump / Return / Syscall / Interrupt 六类控制流节点
+- **模块二分查找**：`module_ranges` 按基址排序后 `std::upper_bound` O(log n) 定位
+- **线程本地 region 缓存**：`thread_local VirtualQuery` 缓存避免热路径内核调用
 
-- 原始边事件：保留 `rip / rel / bytes / target_abs`
-- 跨执行范围提示：离开当前模块 / 进入其他模块 / 进入匿名可执行页时，会追加 `[JUMP_OUT_OF_TRACE_RANGE] from=... to=...`
-- `frida-trace` 风格函数行：`callee(arg=...)` 和 `<= retval`
-- 参数 / 返回值内存预览：对可读非代码指针追加首段 bytes + ASCII
-- 首次命中的函数预览：后台线程按函数入口读取一段连续字节并格式化反汇编
-- 对 `.data/.rdata` 静态引用，除了正文里的 `[static]` / `[static.ptr]`，现在还会额外在同目录输出一份 `*.static_refs.json`
-  把“静态槽位/指向数据”和“引用它的代码位置”做成映射表
+### 双模后端
 
-已知异步投递 API 命中时，函数行会直接按命名参数打出线程入口 / callback / APC 入口，适合从 `VFS 末端 -> AB/资源加载` 这类链路里顺手把后续接力函数抠出来。
+| 模式 | 触发条件 | DR 编程策略 |
+|:-----|:---------|:------------|
+| **DR (主力)** | 模块内正常追踪 | 条件跳转 → Dr0=target, Dr1=fallthrough；直接 call/jmp → Dr0=target；间接 → Dr0=tail 单步一次 |
+| **TF (辅助)** | 匿名页 / 深度过滤 TF 规则 / 探针 step/write / 等待间接目标 | 设置 EFlags.TF，每条指令触发异常，退出区域后 `RestoreHardwareFlowAfterTrapWindow()` 恢复 DR |
 
-构建：
+### 三级流水线异步 I/O
 
-```powershell
-.\build.bat
+```text
+VEH Handler (被追踪线程上下文)
+    │ callback(event) → Enqueue()
+    ▼
+[Stage 1] Ring Buffer — 655360 条预分配 StepEvent，队列满时 producer_cv.wait() 阻塞
+    │ worker_cv.notify_one() (仅从空→非空时唤醒)
+    ▼
+[Stage 2] WorkerLoop — 批量 drain，格式化 / 地址标注 / API 识别 / 函数预览 / static_refs 分析
+    │ EnqueueWrite() (16MB 背压上限)
+    ▼
+[Stage 3] WriterLoop — WriteFile() 落盘
 ```
 
-主要产物：
+### 深度过滤系统
 
-- `bin\release\VDTraceStatic.lib`
-- `bin\release\VDTrace.dll`
-- `bin\release\VDTraceAgent.dll`
-- `bin\release\VDTraceAutoStart.dll`
-- `bin\release\vdtrace_ctl.exe`
-- `bin\release\vdtrace_autostart.exe`
-- `bin\release\winhttp.dll`
-- `bin\release\winhttp_original.dll`
-
-## Python GUI 主流程
-
-1. 把 `bin\release\VDTraceAgent.dll` 放到你方便启动的位置。
-2. 运行 `.\run_python_gui.bat`。
-3. 启动游戏。
-4. GUI 会直接枚举可用目标进程；如果旧 `Loader` 在线，也会一并显示。
-5. 选中目标进程后：
-   - `加载 Agent`：
-     - 有 Loader 时优先发 Loader 请求
-     - 没 Loader 时直接走 `vdtrace_ctl.exe inject`
-   - `会话页 Dump+Fix`：模块列表和真正的模块镜像复制都走 Agent 内部 IPC，默认输出到 `.\dump`；原始文件后缀是 `_dump_raw`，修正版后缀是 `_dump_fix`。
-   - `一键开始`：如果 Agent IPC 还没上线，会先尝试把 `VDTraceAgent.dll` 拉起，再写配置并开始 Trace。
-   - `停止`：停止当前 Trace。
-
-默认输出路径是相对路径，例如 `.\traces\VDTrace-<pid>-YYYYMMDD-HHMMSS.log`，会相对 `VDTraceAgent.dll` 所在目录展开，不会强塞到 `C:`；旧的 `.\traces\VDTrace.log` 现在也会在启动前自动升级成带时间戳的新文件名，避免覆盖旧日志。
-
-## Python GUI Loader 兼容流程
-
-如果你还想走旧的 `winhttp.dll` 在线会话链，仍然可以：
-
-1. 把 `bin\release\winhttp.dll` 和 `bin\release\winhttp_original.dll` 放到目标游戏 EXE 同目录。
-2. 先运行 `.\run_python_gui.bat`，再启动游戏。
-3. GUI 会把旧 Loader 在线会话和直连目标一起显示。
-
-## Python GUI
-
-当前只保留 Python 控制端：
-
-```powershell
-.\run_python_gui.bat
+```text
+depthfilter=outside=2:edge,anon=all:tf,module=GameAssembly.dll:all:tf
 ```
 
-特点：
+| 规则类型 | 语法 | 语义 |
+|:---------|:-----|:-----|
+| 模块外 | `outside=<depth>[:edge\|tf]` | PE 映像但非追踪模块的代码区域 |
+| 匿名页 | `anon=<depth>[:edge\|tf]` | 非 PE 映像的可执行内存（JIT 代码） |
+| 指定模块 | `module=<name>:<depth>[:edge\|tf]` | 为特定 DLL 定义独立层级与执行模式 |
 
-- 继续保留分页工作流
-- 通过现有 `vdtrace_ctl.exe` 复用 configure/start/stop
-- 直接枚举目标进程，同时兼容 Loader 在线会话命名管道
-- 使用标准库 `tkinter`，不额外依赖 `PySide6`
-- 支持 `触发点`、`自动线程捕获`、`屏蔽主线程`、`单次调用即停`、`异步线程追踪`
-- 单独提供 `层级过滤` 分页，支持默认层级、模块外区域、匿名执行页和模块级规则
-- 支持 `增强采样（跨模块）`
-- 支持 `观测器`
-- 会话页直接带 `Dump+Fix`
-- GUI / CLI 共用 `vdtrace_gui.ini`
-- Trace 预览改成增量刷新，新一轮启动会自动清空旧内容，不再每轮轮询都重写整块文本
-- `追踪` 页只保留最近一段预览，避免大日志把 GUI 拖慢；完整内容仍然写到输出文件
+`edge` 模式使用 DR 硬件断点；`tf` 模式在该区域局部切入 Trap Flag 单步，退出区域后自动恢复 DR。
 
-Python GUI 和 C++ 核心链路是分离的，只影响控制端体验，不会改到目标进程内的 Trace / Agent / Loader 行为。
+### 热旁路 (Hot Bypass)
 
-## Python CLI
+当 `hit_policy=first` 下同一条件跳转边被重复命中超过 `hot_bypass_threshold`（默认 32）次时：
+1. 计算循环退出地址（fallthrough 或跳转对端）
+2. 将 DR 重编程至退出点
+3. 进入 `WaitingForHotReturn` 沉睡态
+4. 循环结束后恢复正常追踪
 
-现在还多了一套和 GUI 对齐的 Python CLI：
+### 探针规格 (probe_spec)
 
-```powershell
-.\run_python_cli.bat config-show
-.\run_python_cli.bat sessions
-.\run_python_cli.bat load --session-id 1
-.\run_python_cli.bat modules --session-id 1
-.\run_python_cli.bat dump --session-id 1 --module UnityPlayer.dll
-.\run_python_cli.bat start --session-id 1 --thread-capture --modules UnityPlayer.dll --call-depth 3 --outside-call-depth 2 --anonymous-call-depth 2 --trigger UnityPlayer.dll!0x123456 --observer "UnityPlayer.dll!0x123480->mem:UnityPlayer.dll!0x1FE2750:32:keyiv|reg:rsp:rsp"
-.\run_python_cli.bat status --session-id 1
-.\run_python_cli.bat stop --session-id 1
-.\\run_python_cli.bat memory-read --pid 1234 --address "UnityPlayer.dll+0x1FE2770" --size 64
-.\\run_python_cli.bat memory-write --pid 1234 --address "0x7ff600001000" --hex "90 90 c3"
+三种观测模式，分号分隔多条规则：
+
+| 模式 | 语法 | 运行时行为 |
+|:-----|:-----|:-----------|
+| **Capture** | `hit->reg:rcx\|mem:0xADDR:size[:label]` | VEH 中同步读取 CONTEXT 寄存器 / 固定地址内存 |
+| **Step** | `step@hit steps=N exit=return\|leave\|return-or-leave` | 命中后临时切入 TF，每步发射 Probe 事件 |
+| **Write** | `write@hit watch=addr:size[:label]\|... steps=N exit=...` | TF 单步 + 每步 memcmp watch 目标，仅变化时输出 |
+
+支持 `reg:rcx`、`mem:module!0xRVA:32`、`ptr:rcx+0x10:32` 三种操作数格式。
+
+### 线程模型
+
+- **自动捕获**：`BeginTriggerThreadCapture()` 枚举全部线程，在触发地址挂 DR；`StartTriggerCaptureRefreshWorker()` 每 10ms 刷新新线程
+- **原子竞争**：首个命中线程通过 `compare_exchange_strong` 从 0 晋升为 `active_thread_id`
+- **block_main_thread**：主线程加入 `known_thread_ids` 但不挂断点，自然跳过
+- **异步接力**：命中 `CreateThread` 后解析入口参数 → 后台 Worker 轮询新线程就绪 → 原子切换追踪上下文
+- **排队模式**：`queue_trigger_threads` 启用时后续命中线程被 park，当前追踪结束后 `RotateQueuedTriggerTrace()` 切换
+
+### IPC Agent 协议
+
+| 字段 | 说明 |
+|:-----|:-----|
+| 管道名 | `\\.\pipe\VDTrace-<PID>` |
+| 协议版本 | `kIpcVersion = 17` |
+| 通信模式 | 请求-响应，消息模式 (`PIPE_TYPE_MESSAGE`) |
+| 请求结构 | `IpcCommand` (~16KB)：version + type + payload union |
+| 响应结构 | `IpcResponse`：version + status + message[16384] |
+
+支持命令：Ping / Configure / Start / Stop / Status / ListModules / DumpModule / ReadMemory / WriteMemory / Shutdown
+
+---
+
+## 源码结构
+
+| 模块 | 产物 / 职责 |
+|:-----|:------------|
+| `src/VDTrace*.cpp` | 核心追踪引擎：VEH 管线、DR/TF 后端、指令解码、深度过滤、探针、增强采样、静态引用、环形队列 recorder |
+| `src/agent/VDTraceAgent*.cpp` | Agent DLL：IPC 服务、Session 管理、模块 Dump+Fix、内存读写 |
+| `src/autostart/VDTraceAutoStart*.cpp` | 自动启动 Helper：INI 解析、il2cpp VEH 断点等待、Agent 加载与 configure/start |
+| `src/tools/vdtrace_ctl*.cpp` | IPC CLI 客户端：inject / configure / start / stop / modules / dump / read / write |
+| `src/tools/vdtrace_autostart*.cpp` | 自动启动器 CLI：插件部署、游戏启动、等待 trace 完成 |
+| `src/tools/VDTraceControlSupport*.cpp` | 控制端共享层：命名管道通信、DLL 注入、Loader 会话 |
+| `src/python_gui/` | Python GUI (tkinter) 与 CLI 控制端，共享配置模型 |
+| `src/tests/` | Smoke 回归测试套件 |
+| `include/VDTrace/` | 公共 API 头文件 (`VDTrace.h`, `VDTraceC.h`, `VDTraceIpc.h`) |
+| `include/third_party/zydis/` | Zydis 反汇编引擎头文件 |
+
+---
+
+## 构建
+
+```bat
+build.bat
 ```
 
-特点：
+产物输出到 `bin\release\`，中间文件输出到 `obj\`。
 
-- 命令面和 GUI 同语义，不再直接暴露底层 `vdtrace_ctl.exe configure ...` 那套原始 token
-- 支持：
-  - 在线会话枚举
-  - Agent 拉起
-  - 模块枚举
-  - `Dump+Fix`
-  - 启动 / 停止 / 状态
-  - `屏蔽主线程`
-  - `过滤器`
-  - `增强采样`
-  - `观测器`
-- 默认读取并复用 `vdtrace_gui.ini`
-- `config-save` 会直接把 CLI 覆盖后的策略写回共享配置
-- `self-test` 可直接跑一轮 CLI 自检：
+| 产物 | 类型 | 说明 |
+|:-----|:-----|:-----|
+| `VDTraceStatic.lib` | 静态库 | 核心引擎，供测试 exe 链接 |
+| `VDTrace.dll` | DLL | 核心引擎动态库版本（导出 C API） |
+| `VDTraceAgent.dll` | DLL | 注入目标进程的追踪代理 |
+| `VDTraceAutoStart.dll` | DLL | 自动启动 Helper |
+| `vdtrace_ctl.exe` | EXE | IPC 命令行客户端 |
+| `vdtrace_autostart.exe` | EXE | 自动启动器 |
 
-```powershell
-.\run_python_cli.bat self-test
-```
+---
 
-## 典型参数
+## 当前限制
 
-- `自动线程捕获`：
-  - 开启 `定点触发` 时勾上：自动等待任意线程命中触发点。
-  - 开启 `定点触发` 时取消：启用右侧线程输入框，固定该线程等待触发点，填 `0` 表示主线程。
-  - 关闭 `定点触发` 时取消：直接追右侧线程输入框指定的线程，填 `0` 表示主线程。
-  - 关闭 `定点触发` 且勾上：直接追主线程。
-- `屏蔽主线程`：
-  - 只在 `定点触发 + 自动线程捕获` 模式下生效。
-  - 勾上后主线程命中触发点不会晋升为正式追踪线程，session 会继续等待其他线程命中。
-  - 关闭后保持默认自动捕获行为。
-- `模块`：常见场景直接填 `UnityPlayer.dll`。
-- `指定模块记录`：勾上后只把模块框里的模块当正式记录区域；取消后允许继续记录到外部业务模块。
-- `TF全量单步（实验）`：实验模式，会切到 TF 单步后端，干扰明显更重。
-- `层级过滤`：
-  - 默认层级仍是 `0=不限(all)`，`1=同层(single)`，`2=向下一层`，`3=向下两层`
-  - 现在单独放在 `层级过滤` 分页
-  - 可额外给模块外区域、匿名执行页和指定模块覆盖默认层级
-  - 每条覆盖规则都能单独选 `EDGE / TF`
-  - `TF` 只在该区域局部切入，不会把整条 session 强行退化成全程单步
-  - `空转跳出` 默认 32；关掉后不做热点空转逃逸
-- `触发点`：支持 `0x地址` 或 `模块!0xRVA`，命中后才正式开始 Trace。
-- `输出`：现在改成只读展示，不再手填；按下一键开始后才会自动生成带时间戳的日志名。
-- `观测器`：
-  `capture` 用 `hit->capture|capture`。
-  `step` 用 `step@hit steps=256 exit=return-or-leave`。
-  `write` 用 `write@hit watch=addr:size:label|addr:size:label steps=256 exit=return`。
-  `capture` 支持 `reg:rcx[:label]`、`mem:0xADDR:size[:label]`、`mem:模块!0xRVA:size[:label]`、`ptr:rcx+0x10:size[:label]`。
-  `step/write` 命中后会临时切局部 `TF`；`step` 按指令输出 `kind=probe + [disasm]`，`write` 只在 watch 缓冲区变化时输出 `[probe]` 块。
-- `单次调用即停`：适合配合触发点，只看这一次调用子树。
-- `异步线程追踪`：命中线程创建 API 后自动切到新线程继续追。
-- 系统模块调用现在固定只记录边，不再给单独开关。
-- `增强采样（跨模块）`：跨模块 `call/return` 会额外输出参数缓冲区 `before/after` 小快照，适合看解密、解压、协议编解码。
-- `记录重复命中`：想看循环体和重复 `call` 的真实命中次数时勾上。
-- `Trace 预览`：现在除了原始边事件，还会多出 enter/leave 风格函数行和首次命中函数预览。
-- `参数 / 返回值预览`：对可读缓冲区参数和值会自动补 `mem=... ascii="..."`，更适合看解密、解压、密钥表。
-- `运行状态`：状态栏现在会直接给出 `observe`、`watch`、`hot_streak`、`hot_resume`、`hot_return`，卡现场时不用再靠猜测。
-- `线程状态`：状态栏会额外显示 `线程模式=`、`活动线程=`；自动捕获线程等待中还会带 `捕获=thread`，命中过触发点后还会补 `触发命中=` 和 `最近命中线程=`。
-- `观测器状态`：状态栏会额外显示 `观测器=`，直接看当前配置里启用了几条规则。
-- `内存页`：支持简单内存读写；地址支持 `0xADDR` / `module+0xRVA` / `module!0xRVA`，追踪页和日志页都能把选中地址一键带过去。
-- `会话页 Dump+Fix`：模块列表直接来自目标进程模块快照，真正的 dump/fix 走 Agent 内部 IPC，默认把原始镜像和修正后 PE 输出到 `.\dump`。
-- `真实模块列表`：没拿到真实枚举结果时不会再回退假模块名，界面会直接显示枚举失败或为空，并禁用 Dump。
-- `系统模块过滤`：GUI 模块列表和 `vdtrace_ctl.exe modules <pid>` 默认都会过滤系统模块；如果真要看全量，再用 `vdtrace_ctl.exe modules <pid> all`。
-- `Trace 预览`：当前轮次不再硬截到最近 `2048` 行，会继续完整追加；日志太长时直接看输出文件更合适。
+| 限制 | 说明 |
+|:-----|:-----|
+| 单会话 | 一进程只支持一个活动 Trace 会话 |
+| 间接 call/jmp | 只做基础分类，不保证总能还原目标地址 |
+| VEH 回调开销 | 回调运行在异常处理路径里，逻辑必须尽量轻 |
+| 硬件断点数量 | x86-64 仅 4 个 DR 寄存器，条件跳转需占用 2 个 |
 
-## 底层 CLI 备用路径
+---
 
-如果你不走 `winhttp` 劫持，也可以直接用 CLI：
+## 仓库提交规则
 
-```powershell
-.\bin\release\vdtrace_ctl.exe inject <pid> .\bin\release\VDTraceAgent.dll
-.\bin\release\vdtrace_ctl.exe modules <pid>
-.\bin\release\vdtrace_ctl.exe modules <pid> all
-.\bin\release\vdtrace_ctl.exe dump <pid> UnityPlayer.dll .\dump
-.\\bin\\release\\vdtrace_ctl.exe read <pid> UnityPlayer.dll+0x1FE2770 64
-.\\bin\\release\\vdtrace_ctl.exe write <pid> 0x7ff600001000 9090c3
-.\bin\release\vdtrace_ctl.exe configure <pid> <thread_id> UnityPlayer.dll .\traces\VDTrace-1234-20260406-023000.log 2048 depth=single "depthfilter=outside=2:edge,anon=2:tf,module=GameAssembly.dll:all:tf" hits=every idleescape=32 sample autothread blockmain trigger=UnityPlayer.dll!0x123456 probe=UnityPlayer.dll!0x123480->mem:UnityPlayer.dll!0x1FE2750:32:keyiv|reg:rsp:rsp rootstop
-.\bin\release\vdtrace_ctl.exe start <pid>
-.\bin\release\vdtrace_ctl.exe stop <pid>
-```
+- 提交范围：`src/`、`include/`、`README.md`、`.gitignore`
+- 忽略范围：`bin/`、`obj/`、`docs/`、`tools/`、`ref_pic/`、`backup/`、`*.ini`、`*.log`、`*.bat`、测试产物、构建中间文件
 
-## 自动启动器
+<div align="center">
 
-如果你想做“启动游戏后，先等运行时就位，再自动拉起 tracer 并按 ini 直接开追”，现在有单独的自动启动链：
+**Platform:** Windows x64 | **Toolchain:** Visual Studio 2022 | **Disassembler:** Zydis
 
-```powershell
-.\bin\release\vdtrace_autostart.exe
-```
-
-默认读取仓库根目录的 `vdtrace_autostart.ini`。
-
-当前这条链的行为是：
-
-- 启动目标游戏
-- 部署 `BepInEx\plugins\VDTraceAutoStartPlugin.dll`
-- 写入 `VDTraceAutoStart.activate.ini`
-- 由 `BepInEx` 插件在目标进程里加载 `VDTraceAutoStart.dll`
-- `VDTraceAutoStart.dll` 用 VEH 等 `GameAssembly!il2cpp_runtime_invoke(method)` 命中 `Internal_ActiveSceneChanged`
-- 命中后再 `LoadLibrary` `VDTraceAgent.dll`
-- 按 ini 里的 trace 配置自动 `configure/start`
-- 启动器默认继续等待 trace 结束，然后退出
-
-当前边界：
-
-- 只支持 IL2CPP / BepInEx 风格的 `Internal_ActiveSceneChanged` 等待点
-- 不再依赖 `winhttp.dll` Loader 先上线
-- 真正 trace 的配置仍然走 ini 里的 `[trace]` 段，和 GUI 语义一致
-- `call_depth` 仍是默认层级；`outside_call_depth` / `anonymous_exec_call_depth` / `module_call_depths` 可以额外覆盖
-- `outside_execution_mode` / `anonymous_exec_execution_mode` 支持 `EDGE / TF`
-- `module_call_depths` 现在支持 `ModuleA.dll:3:TF,ModuleB.dll:1:EDGE`
-- `idle_escape_threshold` 控制首次命中模式下的空转跳出阈值；默认 32，0 关闭
-- helper 诊断日志默认输出到 `.\traces\VDTraceAutoStart-时间戳.log`
-
-## 冒烟测试
-
-新增两套本地 smoke：
-
-- `vdtrace_agent_smoke_test.exe`
-  自举 `VDTraceAgent.dll`，验证 Agent 内部模块枚举、内部 `Dump+Fix` 和输出文件落盘
-- `vdtrace_smoke_suite_test.exe`
-  串行拉起整套核心 smoke，当前会覆盖：
-  `vdtrace_example`
-  `vdtrace_example --async-handoff`
-  `vdtrace_async_handoff_smoke_test`
-  `vdtrace_agent_smoke_test`
-  `vdtrace_session_smoke_test`
-  `vdtrace_trigger_wait_test`
-  `vdtrace_rootstop_test`
-  `vdtrace_stop_recovery_test`
-  `vdtrace_decrypt_smoke_test`
-- `vdtrace_session_smoke_test.exe`
-  默认只跑问题点快回归：
-  `same-level`
-  `outside-depth-filter`
-  `anonymous-depth-filter`
-  `heap-extend`
-  `static-refs`
-  `hot-loop-bypass`
-  `auto-thread-capture`
-  需要完整 core 时用 `--full-core`
-  需要专项复现时用：
-  `--case <name>`
-  `--case stability-rounds --stability-case <name> --rounds <n>`
-- `vdtrace_async_handoff_smoke_test.exe`
-  对 `async_thread_handoff` 做 3 轮专项回归，串行拉起 `vdtrace_example.exe --async-handoff`，断言切线程和退出码都稳定
-- `vdtrace_trigger_wait_test.exe`
-  验证“外部模块触发 -> 目标模块正式开始 Trace -> 目标模块热循环自动旁路”这条实战形状
-- `vdtrace_decrypt_smoke_test.exe`
-  生成独立密文文件，跨模块进入解密 helper，再跳入匿名执行页执行动态生成的解密阶段；验证 `rootstop`、算法主链、动态页进出标记、解密结果和增强采样前后快照
-
-其中 `vdtrace_decrypt_smoke_test.exe` 会写固定测试产物名，跑回归时应串行执行。
-
-想把“主模块 -> 外部业务 DLL -> 该 DLL 内部算法函数”这一整条链完整打出来，当前稳定做法是开启 `trace_outside_modules`；否则外部模块内部边默认不会全部进入正式输出面。
+</div>
