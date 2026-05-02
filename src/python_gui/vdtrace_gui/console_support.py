@@ -7,6 +7,7 @@ from .control_cli import TraceCli
 from .loader_controller import LoaderController
 from .models import LoaderSessionSnapshot, default_agent_path
 from .process_sessions import collect_direct_sessions
+from . import session_filter
 from .session_filter import filter_loader_sessions
 from .trace_profile import TraceProfile, build_trace_config_from_profile, copy_trace_profile, normalize_backend_text
 from .trace_settings import load_trace_profile, settings_path
@@ -203,14 +204,8 @@ def run_cli_self_test(repo_root: Path) -> int:
     if settings_path(repo_root).name.lower() != "vdtrace_gui.ini":
         print("[fail] CLI 自检失败：共享配置路径异常。")
         return 1
-    filtered_sessions = filter_loader_sessions(
-        [
-            LoaderSessionSnapshot(session_id=1, pid=300, process_path=r"F:\Program Files\Endfield Game\PlatformProcess.exe", hello_received=True),
-            LoaderSessionSnapshot(session_id=2, pid=200, process_path=r"F:\Program Files\Endfield Game\Endfield.exe", hello_received=True),
-            LoaderSessionSnapshot(session_id=3, pid=100, process_path="dummy.exe", hello_received=True),
-        ]
-    )
-    if [session.pid for session in filtered_sessions] != [200]:
+    filtered_sessions = filter_loader_sessions(session_filter.SELF_TEST_SESSIONS)
+    if [session.pid for session in filtered_sessions] != session_filter.SELF_TEST_EXPECTED_PIDS:
         print("[fail] CLI 自检失败：Loader 会话过滤结果不符合预期。")
         return 1
     print("[ok] CLI 自检通过。")

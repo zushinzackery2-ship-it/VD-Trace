@@ -3,6 +3,11 @@
 
 namespace vdtrace
 {
+    namespace
+    {
+        constexpr int kAsyncHandoffThreadSearchAttempts = 200;
+    }
+
     void StartAsyncHandoffWorker(Session::Impl &impl)
     {
         if (impl.async_handoff_worker.joinable())
@@ -57,7 +62,7 @@ namespace vdtrace
                     }
 
                     DWORD discovered_thread_id = 0;
-                    for (int attempt = 0; attempt < 200 && impl.running.load(); attempt++)
+                    for (int attempt = 0; attempt < kAsyncHandoffThreadSearchAttempts && impl.running.load(); attempt++)
                     {
                         if (TryFindNewProcessThread(impl, discovered_thread_id)
                             && ActivateAsyncThreadById(impl, discovered_thread_id, entry, depth, ignored_error))

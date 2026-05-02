@@ -248,6 +248,8 @@ class VdtraceGuiApp:
         self.root.after(250, self._poll)
 
     def _on_close(self) -> None:
-        save_settings(self.repo_root, self.vars)
-        self.loader.stop()
-        self.root.destroy()
+        try:
+            save_settings(self.repo_root, self.vars)
+        finally:
+            self.loader.stop()
+            self.root.destroy()

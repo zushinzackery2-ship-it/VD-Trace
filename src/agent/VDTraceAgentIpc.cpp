@@ -59,9 +59,20 @@ namespace vdtrace::agent
         return true;
     }
 
+    IpcServer::~IpcServer()
+    {
+        RequestStop();
+    }
+
     void IpcServer::RequestStop()
     {
         stop_requested_.store(true);
+        if (thread_ != nullptr)
+        {
+            WaitForSingleObject(thread_, 5000);
+            CloseHandle(thread_);
+            thread_ = nullptr;
+        }
     }
 
     DWORD WINAPI IpcServer::WorkerEntry(LPVOID param)

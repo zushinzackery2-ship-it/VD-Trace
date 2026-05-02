@@ -168,7 +168,9 @@ namespace vdtrace::runtime_detail
             return EXCEPTION_CONTINUE_SEARCH;
         }
 
+        impl->active_handler_count.fetch_add(1, std::memory_order_acq_rel);
         const LONG result = impl->HandleException(info);
+        impl->active_handler_count.fetch_sub(1, std::memory_order_acq_rel);
         if (result == EXCEPTION_CONTINUE_SEARCH && TryConsumeRecentStoppedSingleStep(info))
         {
             return EXCEPTION_CONTINUE_EXECUTION;

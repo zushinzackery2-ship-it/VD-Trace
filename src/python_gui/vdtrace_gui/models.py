@@ -6,8 +6,8 @@ from pathlib import Path
 import re
 
 
-LOADER_PIPE_NAME = r"\\.\pipe\VDTraceLoaderControl"
-LOADER_MAGIC = 0x5654444C
+LOADER_PIPE_NAME = r"\\.\pipe\WinHttpRedirectProxyControl"
+LOADER_MAGIC = 0x58525057
 LOADER_PROTOCOL_VERSION = 1
 LOADER_FEATURE_BOOTSTRAP = 0x00000001
 LOADER_MAX_PATH_CHARS = 1024

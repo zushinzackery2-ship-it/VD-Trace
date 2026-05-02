@@ -15,7 +15,7 @@ namespace vdtrace::agent
 
       private:
         IpcServer() = default;
-        ~IpcServer() = default;
+        ~IpcServer();
 
         IpcServer(const IpcServer &) = delete;
         IpcServer &operator=(const IpcServer &) = delete;

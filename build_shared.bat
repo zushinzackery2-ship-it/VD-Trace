@@ -341,7 +341,7 @@ if errorlevel 1 exit /b 1
 cl /nologo /std:c++17 /MT /EHsc /utf-8 /Iinclude /Isrc /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /DZYDIS_STATIC_BUILD /DZYCORE_STATIC_BUILD /Foobj\release\vdtrace_autostart\\ /Fpobj\release\vdtrace\vdtrace.pch /Yu"pch.h" /c src\autostart\VDTraceAutoStartConfig.cpp src\autostart\VDTraceAutoStartConfigText.cpp src\autostart\VDTraceAutoStartWait.cpp src\autostart\VDTraceAutoStartHelper.cpp src\autostart\VDTraceAutoStartHelperSupport.cpp
 if errorlevel 1 exit /b 1
 
-cl /nologo /std:c++17 /MT /EHsc /utf-8 /Iinclude /Isrc /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /Foobj\release\vdtrace_autostart\\ /c src\tools\VDTraceControlSupport.cpp src\tools\VDTraceControlSupportUtil.cpp src\tools\VDTraceControlSupportInject.cpp src\tools\VDTraceLoaderControlSupport.cpp src\tools\vdtrace_autostart.cpp src\tools\vdtrace_autostart_io.cpp src\tools\vdtrace_autostart_install.cpp
+cl /nologo /std:c++17 /MT /EHsc /utf-8 /Iinclude /Isrc /Iref_pic\WinHttpRedirectProxy /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /DWINHTTP_REDIRECT_PROXY_ENABLE_PROTOCOL_VERSION /Foobj\release\vdtrace_autostart\\ /c src\tools\VDTraceControlSupport.cpp src\tools\VDTraceControlSupportUtil.cpp src\tools\VDTraceControlSupportInject.cpp src\tools\VDTraceLoaderControlSupport.cpp src\tools\vdtrace_autostart.cpp src\tools\vdtrace_autostart_io.cpp src\tools\vdtrace_autostart_install.cpp
 if errorlevel 1 exit /b 1
 
 link /nologo /DLL /OUT:bin\release\VDTraceAutoStart.dll obj\release\vdtrace\pch.obj obj\release\vdtrace_autostart\VDTraceAutoStartConfig.obj obj\release\vdtrace_autostart\VDTraceAutoStartConfigText.obj obj\release\vdtrace_autostart\VDTraceAutoStartWait.obj obj\release\vdtrace_autostart\VDTraceAutoStartHelper.obj obj\release\vdtrace_autostart\VDTraceAutoStartHelperSupport.obj obj\release\vdtrace_autostart\VDTraceControlSupport.obj obj\release\vdtrace_autostart\VDTraceControlSupportUtil.obj obj\release\vdtrace\VDTraceIpc.obj Psapi.lib Advapi32.lib
@@ -356,16 +356,19 @@ if errorlevel 1 exit /b 1
 link /nologo /DLL /OUT:bin\release\VDTraceEndfieldBaseProxy.dll obj\release\vdtrace\pch.obj obj\release\vdtrace_early_loader\VDTraceEndfieldBaseProxy.obj
 if errorlevel 1 exit /b 1
 
-cl /nologo /std:c++17 /MT /EHsc /utf-8 /Iinclude /Isrc /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /DZYDIS_STATIC_BUILD /DZYCORE_STATIC_BUILD /Foobj\release\vdtrace_loader\\ /Fpobj\release\vdtrace\vdtrace.pch /Yu"pch.h" /c src\loader\WinHttpLoaderDllMain.cpp src\loader\VDTraceLoaderMemoryAccessCore.cpp src\loader\VDTraceLoaderMemoryAccessRequests.cpp src\loader\VDTraceLoaderMemoryShared.cpp src\loader\VDTraceLoaderMemoryServer.cpp
+cl /nologo /std:c++20 /MT /EHsc /utf-8 /Iref_pic\WinHttpRedirectProxy /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /DWINHTTP_REDIRECT_PROXY_ENABLE_PROTOCOL_VERSION /DWINHTTP_REDIRECT_PROXY_ENABLE_BOOTSTRAP "/DWINHTTP_REDIRECT_PROXY_WHITELIST_PROCESS=L\"Endfield.exe\"" /Foobj\release\vdtrace_loader\pch.obj /Fpobj\release\vdtrace_loader\loader.pch /Yc"pch.h" /c ref_pic\WinHttpRedirectProxy\pch.cpp
 if errorlevel 1 exit /b 1
 
-link /nologo /DLL /IGNORE:4222 /OUT:bin\release\winhttp.dll obj\release\vdtrace\pch.obj obj\release\vdtrace_loader\WinHttpLoaderDllMain.obj obj\release\vdtrace_loader\VDTraceLoaderMemoryAccessCore.obj obj\release\vdtrace_loader\VDTraceLoaderMemoryAccessRequests.obj obj\release\vdtrace_loader\VDTraceLoaderMemoryShared.obj obj\release\vdtrace_loader\VDTraceLoaderMemoryServer.obj Advapi32.lib
+cl /nologo /std:c++20 /MT /EHsc /utf-8 /Iref_pic\WinHttpRedirectProxy /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /DWINHTTP_REDIRECT_PROXY_ENABLE_PROTOCOL_VERSION /DWINHTTP_REDIRECT_PROXY_ENABLE_BOOTSTRAP "/DWINHTTP_REDIRECT_PROXY_WHITELIST_PROCESS=L\"Endfield.exe\"" /Foobj\release\vdtrace_loader\\ /Fpobj\release\vdtrace_loader\loader.pch /Yu"pch.h" /c ref_pic\WinHttpRedirectProxy\proxy\dllmain.cpp ref_pic\WinHttpRedirectProxy\proxy\redirect_runtime.cpp ref_pic\WinHttpRedirectProxy\memory\memory_access_core.cpp ref_pic\WinHttpRedirectProxy\memory\memory_access_requests.cpp ref_pic\WinHttpRedirectProxy\memory\memory_shared.cpp ref_pic\WinHttpRedirectProxy\memory\memory_server.cpp
 if errorlevel 1 exit /b 1
 
-cl /nologo /std:c++17 /MT /EHsc /utf-8 /Iinclude /Isrc /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /DZYDIS_STATIC_BUILD /DZYCORE_STATIC_BUILD /Foobj\release\vdtrace_loader\\ /Fpobj\release\vdtrace\vdtrace.pch /Yu"pch.h" /c src\loader\VDTraceLoaderMemoryClient.cpp
+link /nologo /DLL /IGNORE:4222 /OUT:bin\release\winhttp.dll obj\release\vdtrace_loader\pch.obj obj\release\vdtrace_loader\dllmain.obj obj\release\vdtrace_loader\redirect_runtime.obj obj\release\vdtrace_loader\memory_access_core.obj obj\release\vdtrace_loader\memory_access_requests.obj obj\release\vdtrace_loader\memory_shared.obj obj\release\vdtrace_loader\memory_server.obj Advapi32.lib
 if errorlevel 1 exit /b 1
 
-link /nologo /SUBSYSTEM:CONSOLE /OUT:bin\release\vdtrace_memory_client.exe obj\release\vdtrace\pch.obj obj\release\vdtrace_loader\VDTraceLoaderMemoryClient.obj Advapi32.lib
+cl /nologo /std:c++20 /MT /EHsc /utf-8 /Iref_pic\WinHttpRedirectProxy /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /Foobj\release\vdtrace_loader\memory_client.obj /c ref_pic\WinHttpRedirectProxy\memory\memory_client.cpp
+if errorlevel 1 exit /b 1
+
+link /nologo /SUBSYSTEM:CONSOLE /OUT:bin\release\vdtrace_memory_client.exe obj\release\vdtrace_loader\memory_client.obj Advapi32.lib
 if errorlevel 1 exit /b 1
 
 copy /Y "%SYSTEM_WINHTTP%" "bin\release\winhttp_original.dll" >nul

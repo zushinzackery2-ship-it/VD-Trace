@@ -45,3 +45,12 @@ def filter_loader_sessions(sessions: list[LoaderSessionSnapshot]) -> list[Loader
     visible = [session for session in sessions if should_expose_loader_session(session)]
     visible.sort(key=_session_sort_key)
     return visible
+
+
+SELF_TEST_SESSIONS: list[LoaderSessionSnapshot] = [
+    LoaderSessionSnapshot(session_id=1, pid=300, process_path=r"C:\Game\PlatformProcess.exe", hello_received=True),
+    LoaderSessionSnapshot(session_id=2, pid=200, process_path=r"C:\Game\Endfield.exe", hello_received=True),
+    LoaderSessionSnapshot(session_id=3, pid=100, process_path="dummy.exe", hello_received=True),
+]
+
+SELF_TEST_EXPECTED_PIDS: list[int] = [200]

@@ -8,6 +8,7 @@ from pathlib import Path
 from vdtrace_gui.app import VdtraceGuiApp
 from vdtrace_gui.cli_bridge import build_trace_config_from_vars
 from vdtrace_gui.models import LoaderSessionSnapshot, default_agent_path, default_ctl_path, repo_root_from_file
+from vdtrace_gui import session_filter
 from vdtrace_gui.session_filter import filter_loader_sessions
 from vdtrace_gui.trace_profile import default_trace_profile
 
@@ -123,14 +124,8 @@ def _run_gui_self_test(app: VdtraceGuiApp) -> None:
     if not current_idle_escape.isdigit() or int(current_idle_escape) < 0:
         raise RuntimeError("GUI self-test failed: loaded idle-escape threshold should stay a non-negative integer.")
 
-    filtered_sessions = filter_loader_sessions(
-        [
-            LoaderSessionSnapshot(session_id=1, pid=300, process_path=r"F:\Program Files\Endfield Game\PlatformProcess.exe", hello_received=True),
-            LoaderSessionSnapshot(session_id=2, pid=200, process_path=r"F:\Program Files\Endfield Game\Endfield.exe", hello_received=True),
-            LoaderSessionSnapshot(session_id=3, pid=100, process_path="dummy.exe", hello_received=True),
-        ]
-    )
-    if [session.pid for session in filtered_sessions] != [200]:
+    filtered_sessions = filter_loader_sessions(session_filter.SELF_TEST_SESSIONS)
+    if [session.pid for session in filtered_sessions] != session_filter.SELF_TEST_EXPECTED_PIDS:
         raise RuntimeError("GUI self-test failed: loader session filtering should allow only the main target process.")
 
     app.selected_session = LoaderSessionSnapshot(session_id=1, pid=4242, process_path="dummy.exe")

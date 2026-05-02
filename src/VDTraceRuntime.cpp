@@ -4,6 +4,11 @@
 
 namespace vdtrace
 {
+    namespace
+    {
+        constexpr DWORD kSlowTraceStopTimeoutMs = 2000;
+    }
+
     bool Session::Impl::Start(std::wstring &error)
     {
         std::lock_guard<std::mutex> lock(state_lock);
@@ -153,12 +158,12 @@ namespace vdtrace
 
         if (thread_handle != nullptr)
         {
-            runtime_detail::MarkRecentStopThread(active_thread_id.load(), GetTickCount64() + 2000);
+            runtime_detail::MarkRecentStopThread(active_thread_id.load(), GetTickCount64() + kSlowTraceStopTimeoutMs);
             if (backend_mode == BackendMode::TrapFlagContext)
             {
                 stop_requested.store(true);
                 const ULONGLONG begin = GetTickCount64();
-                while (running.load() && GetTickCount64() - begin < 2000)
+                while (running.load() && GetTickCount64() - begin < kSlowTraceStopTimeoutMs)
                 {
                     Sleep(1);
                 }
@@ -172,6 +177,11 @@ namespace vdtrace
             ClearThreadTraceState(thread_handle, clear_error);
             CloseHandle(thread_handle);
             thread_handle = nullptr;
+        }
+
+        while (active_handler_count.load(std::memory_order_acquire) > 0)
+        {
+            Sleep(0);
         }
 
         SnapshotExecutionSummary(*this);

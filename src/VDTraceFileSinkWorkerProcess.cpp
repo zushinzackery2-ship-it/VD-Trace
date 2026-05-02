@@ -210,10 +210,16 @@ namespace vdtrace
         }
         catch (const std::exception &error)
         {
+            stop_requested.store(true, std::memory_order_release);
+            producer_cv.notify_all();
+            worker_cv.notify_all();
             EnqueueWrite(std::string("[vdtrace] recorder_worker_error=") + error.what() + "\n");
         }
         catch (...)
         {
+            stop_requested.store(true, std::memory_order_release);
+            producer_cv.notify_all();
+            worker_cv.notify_all();
             EnqueueWrite("[vdtrace] recorder_worker_error=unknown\n");
         }
     }

@@ -11,11 +11,11 @@
 
   <ItemGroup>
     <Reference Include="BepInEx.Core">
-      <HintPath>F:\Program Files\Endfield Game\BepInEx\core\BepInEx.Core.dll</HintPath>
+      <HintPath>libs\BepInEx.Core.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="BepInEx.Unity.IL2CPP">
-      <HintPath>F:\Program Files\Endfield Game\BepInEx\core\BepInEx.Unity.IL2CPP.dll</HintPath>
+      <HintPath>libs\BepInEx.Unity.IL2CPP.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

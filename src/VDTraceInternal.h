@@ -110,6 +110,7 @@ namespace vdtrace
         DWORD async_handoff_thread_id = 0;
         HANDLE thread_handle = nullptr;
         PVOID veh_handle = nullptr;
+        std::atomic<int32_t> active_handler_count = 0;
         mutable std::mutex state_lock;
     };
 

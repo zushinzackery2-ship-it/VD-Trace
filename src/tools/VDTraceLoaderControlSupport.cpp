@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "tools/VDTraceLoaderControlSupport.h"
 
-#include "loader/VDTraceLoaderIpc.h"
+#include "common/ipc_control.hpp"
 
 namespace vdtrace::tools
 {
@@ -43,7 +43,7 @@ namespace vdtrace::tools
 
         bool ReadLoaderMessage(HANDLE pipe, std::vector<std::uint8_t> &buffer)
         {
-            return VDTraceLoaderIpc::ReadMessage(pipe, buffer);
+            return WinHttpRedirectProxyIpc::ReadMessage(pipe, buffer);
         }
 
         HANDLE CreateOverlappedLoaderServer()
@@ -65,7 +65,7 @@ namespace vdtrace::tools
             attributes.bInheritHandle = FALSE;
 
             return CreateNamedPipeW(
-                VDTRACE_LOADER_PIPE_NAME,
+                WINHTTP_REDIRECT_PROXY_PIPE_NAME,
                 PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
                 PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
                 PIPE_UNLIMITED_INSTANCES,
@@ -131,7 +131,7 @@ namespace vdtrace::tools
                 if (wait_result != WAIT_OBJECT_0)
                 {
                     CancelIo(server);
-                    VDTraceLoaderIpc::ClosePipe(server);
+                    WinHttpRedirectProxyIpc::ClosePipe(server);
                     continue;
                 }
 
@@ -139,25 +139,25 @@ namespace vdtrace::tools
                 bool matched = false;
                 while (ReadLoaderMessage(server, buffer))
                 {
-                    if (buffer.size() < sizeof(VDTraceLoaderIpc::MessageHeader))
+                    if (buffer.size() < sizeof(WinHttpRedirectProxyIpc::MessageHeader))
                     {
                         break;
                     }
 
-                    const auto *header = reinterpret_cast<const VDTraceLoaderIpc::MessageHeader *>(buffer.data());
-                    const auto kind = static_cast<VDTraceLoaderIpc::MessageKind>(header->kind);
-                    if (kind != VDTraceLoaderIpc::MessageKind::AgentHello)
+                    const auto *header = reinterpret_cast<const WinHttpRedirectProxyIpc::MessageHeader *>(buffer.data());
+                    const auto kind = static_cast<WinHttpRedirectProxyIpc::MessageKind>(header->kind);
+                    if (kind != WinHttpRedirectProxyIpc::MessageKind::AgentHello)
                     {
                         continue;
                     }
 
-                    if (buffer.size() < sizeof(VDTraceLoaderIpc::MessageHeader) + sizeof(VDTraceLoaderIpc::AgentHelloPayload))
+                    if (buffer.size() < sizeof(WinHttpRedirectProxyIpc::MessageHeader) + sizeof(WinHttpRedirectProxyIpc::AgentHelloPayload))
                     {
                         break;
                     }
 
-                    const auto *payload = reinterpret_cast<const VDTraceLoaderIpc::AgentHelloPayload *>(buffer.data() + sizeof(VDTraceLoaderIpc::MessageHeader));
-                    const std::wstring reported_process_path = NormalizePathText(DecodeUtf16Text(payload->processPath, VDTRACE_LOADER_MAX_PATH_CHARS));
+                    const auto *payload = reinterpret_cast<const WinHttpRedirectProxyIpc::AgentHelloPayload *>(buffer.data() + sizeof(WinHttpRedirectProxyIpc::MessageHeader));
+                    const std::wstring reported_process_path = NormalizePathText(DecodeUtf16Text(payload->processPath, WINHTTP_REDIRECT_PROXY_MAX_PATH_CHARS));
 
                     const bool pid_matched = expected_pid == 0 || header->pid == expected_pid;
                     const bool path_matched = expected_process_path == nullptr || EqualsInsensitive(reported_process_path, normalized_expected_path);
@@ -180,7 +180,7 @@ namespace vdtrace::tools
                     return true;
                 }
 
-                VDTraceLoaderIpc::ClosePipe(server);
+                WinHttpRedirectProxyIpc::ClosePipe(server);
             }
 
             error = L"等待目标进程 Loader 会话超时。";
@@ -213,7 +213,7 @@ namespace vdtrace::tools
             return false;
         }
 
-        if (!VDTraceLoaderIpc::SendLoadDllRequest(session.pipe, GetCurrentProcessId(), dll_path))
+        if (!WinHttpRedirectProxyIpc::SendLoadDllRequest(session.pipe, GetCurrentProcessId(), dll_path))
         {
             error = L"发送 Loader 加载请求失败。";
             return false;
@@ -229,26 +229,26 @@ namespace vdtrace::tools
                 return false;
             }
 
-            if (buffer.size() < sizeof(VDTraceLoaderIpc::MessageHeader))
+            if (buffer.size() < sizeof(WinHttpRedirectProxyIpc::MessageHeader))
             {
                 continue;
             }
 
-            const auto *header = reinterpret_cast<const VDTraceLoaderIpc::MessageHeader *>(buffer.data());
-            const auto kind = static_cast<VDTraceLoaderIpc::MessageKind>(header->kind);
-            if (kind == VDTraceLoaderIpc::MessageKind::AgentLog)
+            const auto *header = reinterpret_cast<const WinHttpRedirectProxyIpc::MessageHeader *>(buffer.data());
+            const auto kind = static_cast<WinHttpRedirectProxyIpc::MessageKind>(header->kind);
+            if (kind == WinHttpRedirectProxyIpc::MessageKind::AgentLog)
             {
                 continue;
             }
 
-            if (kind != VDTraceLoaderIpc::MessageKind::LoadDllReply
-                || buffer.size() < sizeof(VDTraceLoaderIpc::MessageHeader) + sizeof(VDTraceLoaderIpc::LoadDllReplyPayload))
+            if (kind != WinHttpRedirectProxyIpc::MessageKind::LoadDllReply
+                || buffer.size() < sizeof(WinHttpRedirectProxyIpc::MessageHeader) + sizeof(WinHttpRedirectProxyIpc::LoadDllReplyPayload))
             {
                 continue;
             }
 
-            const auto *payload = reinterpret_cast<const VDTraceLoaderIpc::LoadDllReplyPayload *>(buffer.data() + sizeof(VDTraceLoaderIpc::MessageHeader));
-            reply_text = DecodeUtf16Text(payload->text, VDTRACE_LOADER_MAX_TEXT_CHARS);
+            const auto *payload = reinterpret_cast<const WinHttpRedirectProxyIpc::LoadDllReplyPayload *>(buffer.data() + sizeof(WinHttpRedirectProxyIpc::MessageHeader));
+            reply_text = DecodeUtf16Text(payload->text, WINHTTP_REDIRECT_PROXY_MAX_TEXT_CHARS);
             if (payload->status == 0)
             {
                 return true;
@@ -275,7 +275,7 @@ namespace vdtrace::tools
     {
         if (session.pipe != INVALID_HANDLE_VALUE)
         {
-            VDTraceLoaderIpc::ClosePipe(session.pipe);
+            WinHttpRedirectProxyIpc::ClosePipe(session.pipe);
         }
         session = {};
         session.pipe = INVALID_HANDLE_VALUE;

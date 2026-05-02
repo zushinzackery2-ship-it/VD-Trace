@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
 
 from .depth_filter_page import DepthFilterController
@@ -107,7 +108,7 @@ class VdtraceMainView:
         self._add_page("preview", "追踪", self._build_preview_page)
         self._add_page("log", "日志", self._build_log_page)
 
-    def _add_page(self, key: str, title: str, builder: callable) -> None:
+    def _add_page(self, key: str, title: str, builder: "Callable[[ttk.Frame], None]") -> None:
         if self.notebook is None:
             return
         page = ttk.Frame(self.notebook, padding=12)
