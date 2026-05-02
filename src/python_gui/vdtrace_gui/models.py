@@ -8,8 +8,6 @@ import re
 
 LOADER_PIPE_NAME = r"\\.\pipe\WinHttpRedirectProxyControl"
 LOADER_MAGIC = 0x58525057
-LOADER_PROTOCOL_VERSION = 1
-LOADER_FEATURE_BOOTSTRAP = 0x00000001
 LOADER_MAX_PATH_CHARS = 1024
 LOADER_MAX_TEXT_CHARS = 256
 
@@ -24,34 +22,22 @@ class LoaderSessionSnapshot:
     session_id: int
     pid: int = 0
     process_path: str = ""
-    source: str = "loader"
     protocol_version: int = 0
     feature_flags: int = 0
     connected: bool = True
     hello_received: bool = False
 
     @property
-    def supports_bootstrap(self) -> bool:
-        return self.protocol_version >= LOADER_PROTOCOL_VERSION and bool(
-            self.feature_flags & LOADER_FEATURE_BOOTSTRAP
-        )
-
-    @property
     def display_name(self) -> str:
         if self.pid == 0:
             return f"[等待握手:{self.session_id}] Loader 尚未上报"
-        if self.source == "direct":
-            return f"[{self.pid}] {self.process_path} [直连]"
         return f"[{self.pid}] {self.process_path}"
 
     @property
     def capability_text(self) -> str:
         if self.pid == 0:
             return "等待 Loader 握手。"
-        if self.source == "direct":
-            return "直连 | 未使用 Loader | 可直接注入 Agent"
-        support = "支持" if self.supports_bootstrap else "不支持"
-        return f"在线 | 协议 v{self.protocol_version} | 自动拉起 Agent {support}"
+        return f"在线 | 协议 v{self.protocol_version}"
 
 
 @dataclass(slots=True)

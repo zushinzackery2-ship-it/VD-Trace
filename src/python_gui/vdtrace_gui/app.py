@@ -11,7 +11,6 @@ from .app_actions import clear_logs, dump_module, load_agent, read_memory, start
 from .app_status import format_trace_status_text
 from .loader_controller import LoaderController
 from .models import LoaderSessionSnapshot, default_output_path, is_auto_output_path
-from .process_sessions import collect_direct_sessions
 from .settings_store import load_settings, save_settings
 from .trace_preview import TracePreviewBuffer
 from .ui_state import UiCallbacks, create_ui_variables
@@ -89,9 +88,7 @@ class VdtraceGuiApp:
         if not force and now < self.next_session_poll_at and self.sessions_revision == self.loader.sessions_revision:
             return
         selected_pid = self.selected_session.pid if self.selected_session else 0
-        loader_sessions = self.loader.snapshot_sessions()
-        existing_pids = {item.pid for item in loader_sessions if item.pid > 0}
-        sessions = loader_sessions + collect_direct_sessions(existing_pids)
+        sessions = self.loader.snapshot_sessions()
         self.session_lookup = {item.display_name: item for item in sessions}
         if self.view.session_combo is not None:
             self.view.session_combo["values"] = list(self.session_lookup.keys())

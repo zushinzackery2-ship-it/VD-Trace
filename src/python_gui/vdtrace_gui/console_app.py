@@ -83,9 +83,7 @@ def _handle_sessions(loader: LoaderController, wait_ms: int) -> int:
         print("[fail] 当前没有可用目标进程。")
         return 1
     for session in sessions:
-        print(
-            f"session_id={session.session_id} pid={session.pid} source={session.source} supports_bootstrap={'true' if session.supports_bootstrap else 'false'}"
-        )
+        print(f"session_id={session.session_id} pid={session.pid}")
         print(f"  path={session.process_path}")
         print(f"  status={session.capability_text}")
     return 0

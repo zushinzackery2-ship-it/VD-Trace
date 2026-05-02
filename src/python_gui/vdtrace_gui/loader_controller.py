@@ -17,7 +17,7 @@ from .models import (
     LOADER_PIPE_NAME,
     LoaderSessionSnapshot,
 )
-from .session_filter import filter_loader_sessions, is_allowed_loader_process_path
+from .session_filter import filter_loader_sessions
 from .win32pipe import (
     PipeError,
     close_handle,
@@ -107,9 +107,6 @@ class LoaderController:
         with self._session_lock:
             state = self._sessions.get(session_id)
         if state is None:
-            return False
-        if not is_allowed_loader_process_path(state.snapshot.process_path):
-            self._append_log(f"[Loader] 已拒绝向非主目标进程发送加载请求: pid={state.snapshot.pid} path={state.snapshot.process_path}")
             return False
         header = HEADER_STRUCT.pack(
             LOADER_MAGIC,

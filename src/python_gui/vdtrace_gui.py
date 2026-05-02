@@ -126,7 +126,7 @@ def _run_gui_self_test(app: VdtraceGuiApp) -> None:
 
     filtered_sessions = filter_loader_sessions(session_filter.SELF_TEST_SESSIONS)
     if [session.pid for session in filtered_sessions] != session_filter.SELF_TEST_EXPECTED_PIDS:
-        raise RuntimeError("GUI self-test failed: loader session filtering should allow only the main target process.")
+        raise RuntimeError("GUI self-test failed: loader session filtering should keep all connected sessions.")
 
     app.selected_session = LoaderSessionSnapshot(session_id=1, pid=4242, process_path="dummy.exe")
     app.session_lookup = {"dummy": LoaderSessionSnapshot(session_id=1, pid=4242, process_path="dummy.exe")}

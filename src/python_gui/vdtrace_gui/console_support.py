@@ -6,7 +6,6 @@ from pathlib import Path
 from .control_cli import TraceCli
 from .loader_controller import LoaderController
 from .models import LoaderSessionSnapshot, default_agent_path
-from .process_sessions import collect_direct_sessions
 from . import session_filter
 from .session_filter import filter_loader_sessions
 from .trace_profile import TraceProfile, build_trace_config_from_profile, copy_trace_profile, normalize_backend_text
@@ -42,9 +41,7 @@ def wait_for_sessions(loader: LoaderController, wait_ms: int) -> list[LoaderSess
 
 
 def _collect_sessions(loader: LoaderController) -> list[LoaderSessionSnapshot]:
-    loader_sessions = loader.snapshot_sessions()
-    existing_pids = {session.pid for session in loader_sessions if session.pid > 0}
-    return loader_sessions + collect_direct_sessions(existing_pids)
+    return loader.snapshot_sessions()
 
 
 def ensure_agent_online(
@@ -60,20 +57,13 @@ def ensure_agent_online(
         return "Agent 路径为空。"
     if not Path(agent_path).exists():
         return f"未找到 Agent DLL: {agent_path}"
-    if session is None or session.source == "direct":
-        inject_result = cli.inject(pid, agent_path)
-        if not inject_result.success:
-            return inject_result.message
-    elif session.supports_bootstrap:
-        load_result = loader.send_load_request_with_timeout(session.session_id, agent_path, 1500)
-        if load_result is None:
-            return "发送 Agent 拉起请求超时，目标进程的 Loader 可能已卡住。"
-        if not load_result:
-            return "发送 Agent 拉起请求失败。"
-    else:
-        inject_result = cli.inject(pid, agent_path)
-        if not inject_result.success:
-            return inject_result.message
+    if session is None:
+        return "未找到 Loader 会话；请确认目标进程已通过 autostart 或 Loader 链路加载 Agent。"
+    load_result = loader.send_load_request_with_timeout(session.session_id, agent_path, 1500)
+    if load_result is None:
+        return "发送 Agent 拉起请求超时，Loader 可能已卡住。"
+    if not load_result:
+        return "发送 Agent 拉起请求失败。"
     if not cli.wait_until_online(pid, 5000):
         return "Agent IPC 未在 5 秒内上线。"
     return None

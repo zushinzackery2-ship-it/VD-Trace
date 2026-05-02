@@ -18,8 +18,6 @@ def load_agent(app: "VdtraceGuiApp") -> None:
 
     def worker():
         agent_path = app.vars.agent_var.get().strip()
-        if session.source == "direct" or not session.supports_bootstrap:
-            return app.cli.inject(session.pid, agent_path)
         return app.loader.send_load_request_with_timeout(session.session_id, agent_path, 1500)
 
     def on_done(result) -> None:

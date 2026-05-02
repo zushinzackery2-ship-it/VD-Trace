@@ -172,16 +172,11 @@ class DumpModuleSupport:
         if self.cli.ping(session.pid).success:
             return None
         agent_path = self.vars.agent_var.get().strip()
-        if session.source == "direct" or not session.supports_bootstrap:
-            inject_result = self.cli.inject(session.pid, agent_path)
-            if not inject_result.success:
-                return inject_result.message
-        else:
-            load_result = self.loader.send_load_request_with_timeout(session.session_id, agent_path, 1500)
-            if load_result is None:
-                return "发送 Agent 拉起请求超时，目标进程的 Loader 可能已卡住。"
-            if not load_result:
-                return "发送 Agent 拉起请求失败。"
+        load_result = self.loader.send_load_request_with_timeout(session.session_id, agent_path, 1500)
+        if load_result is None:
+            return "发送 Agent 拉起请求超时，Loader 可能已卡住。"
+        if not load_result:
+            return "发送 Agent 拉起请求失败。"
         if not self.cli.wait_until_online(session.pid, 5000):
             return "Agent IPC 未在 5 秒内上线。"
         return None
