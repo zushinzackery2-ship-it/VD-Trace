@@ -22,3 +22,17 @@ Desktop.ini
 *.VC.opendb
 *.suo
 *.user
+
+# Local/runtime artifacts
+bin/
+obj/
+*.ini
+*.log
+*.tmp
+*.cache
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.exp
+*.lib

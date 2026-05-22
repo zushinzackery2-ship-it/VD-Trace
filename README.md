@@ -143,7 +143,8 @@ depthfilter=outside=2:edge,anon=all:tf,module=GameAssembly.dll:all:tf
 | `src/tools/vdtrace_ctl*.cpp` | IPC CLI 客户端：inject / configure / start / stop / modules / dump / read / write |
 | `src/tools/vdtrace_autostart*.cpp` | 自动启动器 CLI：插件部署、游戏启动、等待 trace 完成 |
 | `src/tools/VDTraceControlSupport*.cpp` | 控制端共享层：命名管道通信、DLL 注入、Loader 会话 |
-| `src/python_gui/` | Python GUI (tkinter) 与 CLI 控制端，共享配置模型 |
+| `src/flutter_gui/` | Flutter Windows GUI 控制端，复用 `vdtrace_ctl.exe` 控制 Agent，兼容 `vdtrace_gui.ini` |
+| `src/python_gui/` | 旧 Python GUI / CLI 控制端，迁移期间保留为协议与配置自检对照 |
 | `src/tests/` | Smoke 回归测试套件 |
 | `include/VDTrace/` | 公共 API 头文件 (`VDTrace.h`, `VDTraceC.h`, `VDTraceIpc.h`) |
 | `include/third_party/zydis/` | Zydis 反汇编引擎头文件 |
@@ -158,6 +159,14 @@ build.bat
 
 产物输出到 `bin\release\`，中间文件输出到 `obj\`。
 
+Flutter GUI 使用本机 SDK 构建：
+
+```bat
+E:\KDR\flutter\bin\flutter.bat build windows --release
+```
+
+Flutter release 产物位于 `src\flutter_gui\build\windows\x64\runner\Release\vdtrace_gui.exe`。
+
 | 产物 | 类型 | 说明 |
 |:-----|:-----|:-----|
 | `VDTraceStatic.lib` | 静态库 | 核心引擎，供测试 exe 链接 |
@@ -166,6 +175,7 @@ build.bat
 | `VDTraceAutoStart.dll` | DLL | 自动启动 Helper |
 | `vdtrace_ctl.exe` | EXE | IPC 命令行客户端 |
 | `vdtrace_autostart.exe` | EXE | 自动启动器 |
+| `vdtrace_gui.exe` | EXE | Flutter GUI 控制端 |
 
 ---
 
