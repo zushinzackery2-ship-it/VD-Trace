@@ -16,9 +16,7 @@
 ---
 
 > [!NOTE]
-> **当前定位**
-> VD-Trace 以硬件调试寄存器（DR0-DR3）为主后端，在基本块粒度上捕获控制流边；仅在匿名执行页、深度过滤 TF 区域或探针单步场景下临时切入 Trap Flag 模式。
-> 主线工作流为 `autostart + BepInEx plugin` 直接注入；`winhttp.dll` 在线会话仅保留兼容用途。
+> 以硬件调试寄存器（DR0-DR3）为主后端，在基本块粒度捕获控制流边；匿名页 / 深度过滤 TF 区域 / 探针单步场景下临时切入 Trap Flag。主线工作流为 `autostart + BepInEx plugin` 直接注入。
 
 ---
 
@@ -190,10 +188,24 @@ Flutter release 产物位于 `src\flutter_gui\build\windows\x64\runner\Release\v
 
 ---
 
-## 仓库提交规则
+## 快速开始
 
-- 提交范围：`src/`、`include/`、`README.md`、`.gitignore`
-- 忽略范围：`bin/`、`obj/`、`docs/`、`tools/`、`ref_pic/`、`backup/`、`*.ini`、`*.log`、`*.bat`、测试产物、构建中间文件
+```bash
+# 1. 编译
+build.bat
+
+# 2. 部署 BepInEx 插件 + 启动游戏
+vdtrace_autostart.exe config.ini
+
+# 3. 控制端（游戏启动后）
+vdtrace_ctl.exe <PID> configure --config trace_config.ini
+vdtrace_ctl.exe <PID> start
+vdtrace_ctl.exe <PID> stop
+```
+
+产物输出到 `bin\release\`，中间文件输出到 `obj\`。
+
+---
 
 <div align="center">
 
