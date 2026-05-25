@@ -6,6 +6,7 @@
 # But allow these
 !/README.md
 !/.gitignore
+!/Task-Status.md
 !/src/
 !/include/
 
