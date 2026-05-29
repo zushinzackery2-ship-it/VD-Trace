@@ -6,6 +6,10 @@
 # But allow these
 !/README.md
 !/.gitignore
+!/.clangd
+!/NuGet.config
+!/CMakeLists.txt
+!/build_release.bat
 !/Task-Status.md
 !/src/
 !/include/

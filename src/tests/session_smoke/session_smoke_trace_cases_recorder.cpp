@@ -1,6 +1,6 @@
 #include "session_smoke_cli.h"
 #include "session_smoke_trace_internal.h"
-#include "VDTraceFileSinkInternal.h"
+#include "core/recorder/VDTraceFileSinkInternal.h"
 
 #include <atomic>
 #include <filesystem>

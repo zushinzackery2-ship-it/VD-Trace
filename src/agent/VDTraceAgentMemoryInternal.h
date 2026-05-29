@@ -3,7 +3,7 @@
 
 #include "agent/VDTraceAgentMemory.h"
 #include "VDTrace/VDTraceIpc.h"
-#include "VDTraceInternal.h"
+#include "core/runtime/VDTraceInternal.h"
 
 namespace vdtrace::agent::memory_detail
 {

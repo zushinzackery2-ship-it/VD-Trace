@@ -1,39 +1,10 @@
 #include "pch.h"
 #include "agent/VDTraceAgentIpc.h"
+#include "agent/VDTraceAgentIpcInternal.h"
 #include "agent/VDTraceAgentState.h"
 
 namespace vdtrace::agent
 {
-    namespace
-    {
-        void PrepareResponse(IpcResponse &response)
-        {
-            response = {};
-            response.version = kIpcVersion;
-            response.status = IPC_STATUS_OK;
-        }
-
-        bool BuildPipeSecurityAttributes(SECURITY_ATTRIBUTES &attributes, SECURITY_DESCRIPTOR &descriptor)
-        {
-            std::memset(&attributes, 0, sizeof(attributes));
-            std::memset(&descriptor, 0, sizeof(descriptor));
-            if (!InitializeSecurityDescriptor(&descriptor, SECURITY_DESCRIPTOR_REVISION))
-            {
-                return false;
-            }
-
-            if (!SetSecurityDescriptorDacl(&descriptor, TRUE, nullptr, FALSE))
-            {
-                return false;
-            }
-
-            attributes.nLength = sizeof(attributes);
-            attributes.lpSecurityDescriptor = &descriptor;
-            attributes.bInheritHandle = FALSE;
-            return true;
-        }
-    }
-
     IpcServer &IpcServer::Instance()
     {
         static IpcServer instance;
@@ -66,10 +37,31 @@ namespace vdtrace::agent
 
     void IpcServer::RequestStop()
     {
-        stop_requested_.store(true);
-        if (thread_ != nullptr)
+        HANDLE thread = nullptr;
+        std::wstring pipe_name;
         {
-            WaitForSingleObject(thread_, 5000);
+            std::lock_guard<std::mutex> lock(lock_);
+            stop_requested_.store(true);
+            thread = thread_;
+            pipe_name = pipe_name_;
+        }
+
+        if (thread == nullptr)
+        {
+            return;
+        }
+
+        ipc_detail::WakePipeServer(pipe_name, thread);
+        ipc_detail::CancelWorkerIo(thread);
+        const DWORD wait_result = WaitForSingleObject(thread, ipc_detail::kIpcServerStopWaitMs);
+        if (wait_result != WAIT_OBJECT_0)
+        {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(lock_);
+        if (thread_ == thread)
+        {
             CloseHandle(thread_);
             thread_ = nullptr;
         }
@@ -90,7 +82,7 @@ namespace vdtrace::agent
             SECURITY_ATTRIBUTES security_attributes = {};
             SECURITY_DESCRIPTOR security_descriptor = {};
             SECURITY_ATTRIBUTES *pipe_security = nullptr;
-            if (BuildPipeSecurityAttributes(security_attributes, security_descriptor))
+            if (ipc_detail::BuildPipeSecurityAttributes(security_attributes, security_descriptor))
             {
                 pipe_security = &security_attributes;
             }
@@ -102,7 +94,7 @@ namespace vdtrace::agent
                 1,
                 sizeof(IpcResponse),
                 sizeof(IpcCommand),
-                1000,
+                ipc_detail::kIpcServerPipeTimeoutMs,
                 pipe_security);
             if (pipe == INVALID_HANDLE_VALUE)
             {
@@ -116,9 +108,16 @@ namespace vdtrace::agent
                 continue;
             }
 
+            if (stop_requested_.load())
+            {
+                DisconnectNamedPipe(pipe);
+                CloseHandle(pipe);
+                break;
+            }
+
             IpcCommand command = {};
             IpcResponse response = {};
-            PrepareResponse(response);
+            ipc_detail::PrepareResponse(response);
 
             DWORD bytes_read = 0;
             if (!ReadFile(pipe, &command, sizeof(command), &bytes_read, nullptr) || bytes_read != sizeof(command))

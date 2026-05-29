@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "autostart/VDTraceAutoStartHelperInternal.h"
 
-#include "tools/VDTraceControlSupport.h"
+#include "control/ipc_client/VDTraceControlSupport.h"
 
 #include <fstream>
 

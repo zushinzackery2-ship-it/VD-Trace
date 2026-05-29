@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>VDTraceAutoStartPlugin</AssemblyName>
+    <RootNamespace>VDTraceAutoStartPlugin</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <OutputPath>..\..\..\bin\release\bepinex_plugin\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.755" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,13 @@
+CompileFlags:
+  Add:
+    - -std=c++20
+    - -IE:/科研/VD-Trace/src
+    - -IE:/科研/VD-Trace/include
+    - -IE:/科研/VD-Trace/include/third_party
+    - -DWIN32
+    - -D_WINDOWS
+    - -DUNICODE
+    - -D_UNICODE
+    - -DNOMINMAX
+Diagnostics:
+  UnusedIncludes: None

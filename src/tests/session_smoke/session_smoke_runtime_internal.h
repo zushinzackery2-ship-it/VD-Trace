@@ -2,7 +2,7 @@
 #define VDTRACE_SESSION_SMOKE_RUNTIME_INTERNAL_H
 
 #include "session_smoke_support.h"
-#include "VDTraceInternal.h"
+#include "core/runtime/VDTraceInternal.h"
 
 #include <Windows.h>
 

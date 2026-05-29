@@ -2,42 +2,21 @@
 
 ## 1. 当前任务 / 需求 / 待办清单
 
-### 参考远程 VD-Trace UI 交互
-- [x] 拉取 `https://github.com/zushinzackery2-ship-it/VD-Trace` 到临时目录，只做交互参考
-- [x] 提炼非布局 UI 交互策略（按钮放置、日志页动作、状态反馈、操作流）
-- [x] 将适合项落地到当前 Flutter GUI，禁止跨项目代码引用
-- [x] analyze/test/build 并覆盖 `bin/release/`
-
-### Flutter 整体布局检查与重整
-- [x] 检查当前顶部栏 / 命令栏 / 分页栏布局层级
-- [x] 重整为纯标题拖拽栏 + 命令/状态同排 + 单一分页主内容
-- [x] analyze/test/build 并覆盖 `bin/release/`
-
-### Python GUI -> Flutter GUI 替换
-- [x] 使用 `E:\KDR\flutter\bin\flutter.bat` 在 `src/flutter_gui/` 建立 Flutter Windows 控制端
-- [x] 移植 Python GUI 的控制契约：`vdtrace_ctl.exe` 调用、`TraceConfig` 参数生成、`vdtrace_gui.ini` 读写、状态格式化、trace preview、memory 编码、depth filter、observer/probe 规则
-- [x] 实现 Flutter 页面：会话/Agent 加载、追踪策略、深度过滤、观测器、内存 R/W、trace preview、Loader 日志
-- [x] 处理 Loader 命名管道：Flutter bridge 已接收会话 hello/log；Agent 加载请求未启用直接注入 fallback，后续需要长连接 pipe 完整化
-- [x] README 源码结构与构建说明切到 Flutter GUI
-- [x] 跑 Flutter analyze/test/build，并保留 Python 自检作为迁移对照直到功能等价
-
-### Review 修复（5个确认问题）
-- [ ] `src/agent/VDTraceAgentIpc.h/.cpp`：`thread_` 句柄泄漏，析构为 default，无 WaitForSingleObject + CloseHandle
-- [ ] `src/bepinex_plugin/VDTraceAutoStartPlugin.csproj`：HintPath 硬编码 `F:\Program Files\...`
-- [ ] `src/python_gui/vdtrace_gui/console_support.py` + `vdtrace_gui.py`：测试数据重复
-- [ ] `src/VDTraceRuntime.cpp:161`：magic number `2000`（超时阈值）
-- [ ] `src/VDTraceAsyncHandoff.cpp:60`：magic number `200`（重试阈值）
-
-### 交付流程
-- [ ] 轻量测试通过
-- [ ] 冗余逻辑/僵尸代码清理
-- [ ] 综合优化
-- [x] VehTrace 仓库新建 new 分支推送远程
-- [ ] WinHttp 推送到 WinHttpRedirectProxy 仓库 main 分支
+- 当前无未完成交付项
 
 
 ## 2. 已解决问题 / 已完成需求
 
+- README 已同步当前控制入口：新增 Flutter GUI / C++ CLI / autostart / BepInEx / early_loader 入口边界，明确 Python/Tkinter legacy GUI/CLI 已下线删除，并修正早期加载器构建段落格式
+- Python legacy GUI/CLI 控制端已下线并删除：当前控制入口收敛为 Flutter Windows GUI、`vdtrace_ctl.exe`、`vdtrace_autostart.exe`；旧 `src/python_gui/`、`vdtrace_cli.py`、`vdtrace_gui.py` 引用复查为 0；C++ Release 构建通过；Release smoke suite 通过；smoke 派生 static_refs/bin/dump 产物已清理
+- Review 5 项已收敛：Agent IPC 停止链路可唤醒阻塞中的管道连接等待，并通过 `CancelSynchronousIo` 覆盖已连接后的同步 I/O 阻塞；BepInEx 插件已使用 NuGet 包引用；runtime/async 两处阈值已使用命名常量；C++ Release 构建和 smoke suite 通过，临时 static_refs/dump/bin 已清理
+- Python GUI -> Flutter GUI 替换已完成：Flutter Windows 控制端已建立，核心控制契约、配置、trace preview、memory、depth filter、observer/probe、Loader 日志页面已落地；Flutter analyze/test/build 通过，产物已覆盖 `bin/release/`
+- Flutter 整体布局重整已完成：顶部拆为纯标题拖拽栏 + 命令/状态同排 + 单一分页主内容，拖拽、双击最大化、无系统标题栏和亮色主题均已收敛
+- 远程 VD-Trace UI 交互参考已落地：按钮归位、日志页动作、模块页刷新/Dump、内存最近结果、控制器禁用态和状态反馈已完成
+- VehTrace 仓库新建 new 分支推送远程已完成
+
+- 模块目录重整已完成：`src/VDTrace*.cpp/.h` 平铺核心源码已迁入 `src/core/` 职责目录；控制端共享层已拆到 `src/control/`；CLI 入口已拆到 `src/tools/vdtrace_ctl/`、`src/tools/vdtrace_autostart/`、`src/tools/examples/`；BepInEx 插件迁入 `src/plugins/bepinex/` 并改为 NuGet 包引用；早期加载器迁入 `src/loaders/early_loader/`；README 已同步；旧路径引用和旧 `src/bepinex_plugin/obj` 生成产物已清理；`.clangd` 已补充 include 根，关键文件 LSP 检查 clean；`dotnet build src\plugins\bepinex\VDTraceAutoStartPlugin.csproj -c Release` 通过（NU1603 版本替代 warning）；C++ Release x64 构建入口已切到 `build_release.bat` + CMake/VS2022，输出 `bin/release/`，中间文件 `obj/cmake-x64-release/`
+- C++ Release x64 构建与 smoke 收尾已完成：`cmd.exe /c "call build_release.bat"` 构建通过；`cmd.exe /c "cd /d E:\科研\VD-Trace\bin\release && vdtrace_smoke_suite_test.exe"` 全量 smoke 通过；解密 smoke 已显式使用 TF/full 追踪覆盖 helper DLL 与匿名执行页，decoder ret 事件已携带返回目标以稳定标记离开动态执行页；测试日志、static_refs 和 dump 临时产物已清理
 - 更新README.md，添加新模块（BepInEx插件、早期加载器、HeapPeek、Extender）和功能说明，更新源码结构和构建说明，已推送到远程仓库
 - Flutter 主分页栏已居中：TabBar 外层 Center，`tabAlignment: TabAlignment.center`；analyze/test/build 通过并覆盖 `bin/release/`
 - 参考远程 VD-Trace UI 后完成交互归位：顶部只保留 PID/会话/状态；加载 Agent 放核心页；开始/停止放预览页，日志页保留停止；刷新模块/Dump 放模块页；内存页增加最近结果；按钮统一使用控制器 can* getter 禁用；analyze/test/build 通过并覆盖 `bin/release/`
@@ -56,7 +35,7 @@
 - Flutter GUI 初版已落地：新增 `src/flutter_gui/`，`flutter analyze` / `flutter test` / `flutter build windows --release` 均通过，产物为 `src/flutter_gui/build/windows/x64/runner/Release/vdtrace_gui.exe`
 - WinHttp 代理统一迁移已完成：
   - ref_pic 增强：`ipc_control.hpp` 加 `kProtocolVersion`/`kFeatureBootstrapAfterLoad` + `AgentHelloPayload` 条件字段 + `SendAgentHello` 填充；`redirect_runtime.cpp` 加 `#ifdef ENABLE_BOOTSTRAP` 和 `#ifdef WHITELIST_PROCESS` 分支
-  - VDTRACE 侧：删 `src/loader/`（15个文件）+ 删 `VDTraceLoaderAdapter.h`；`VDTraceLoaderControlSupport.cpp` 命名空间统一；Python GUI `models.py` magic/pipe 名统一到 ref_pic；`build_shared.bat` 加 `ENABLE_PROTOCOL_VERSION` 宏
+  - VDTRACE 侧：删 `src/loader/`（15个文件）+ 删 `VDTraceLoaderAdapter.h`；`VDTraceLoaderControlSupport.cpp` 命名空间统一；`build_shared.bat` 加 `ENABLE_PROTOCOL_VERSION` 宏
   - 回归通过：`build_shared.bat full` 零 error、session smoke 9 cases passed、smoke suite 全 passed
 - 已新增 `flutter-windows-frameless` skill 到 opencode 与 Codex，沉淀 Flutter Windows runner 无系统标题栏、Flutter 自绘标题栏、Win32 命中测试和最终 exe style 验证流程
 - VehTrace 仓库 winhttp-unification 分支已推送到远程：`git push origin winhttp-unification` 成功
@@ -65,7 +44,7 @@
 
 - Flutter SDK 路径：`E:\KDR\flutter\bin\flutter.bat`，当前可用版本 Flutter 3.38.1 / Dart 3.10.0
 - Flutter Loader bridge 当前可接收 `AgentHello` / `AgentLog`，但还未持有长连接 pipe 执行 `LoadDllRequest`；界面明确阻止回退直接注入，避免恢复旧 fallback 语义
-- `src/python_gui/` 不只是 tkinter UI，还包含 CLI、配置迁移、协议/参数编码和自检资产；替换时不能整包先删
+- Python legacy GUI/CLI 已删除；Flutter GUI 和 C++ CLI 是当前控制入口，后续协议和配置演进不要再回填旧 Tkinter/Python 链路
 - Flutter GUI 应继续以 `vdtrace_ctl.exe` 作为 Agent IPC seam，Loader pipe 另行实现 bridge，避免 Dart UI 直接碰 Agent IPC 结构体
 - ref_pic 通过编译宏（`ENABLE_PROTOCOL_VERSION` / `ENABLE_BOOTSTRAP` / `WHITELIST_PROCESS`）实现零侵入增强
 - 工具侧编译段也需要 `ENABLE_PROTOCOL_VERSION` 宏，否则 `AgentHelloPayload` 大小不匹配

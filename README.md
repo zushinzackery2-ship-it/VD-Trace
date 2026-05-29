@@ -47,6 +47,20 @@
 
 ---
 
+## 当前控制入口
+
+| 入口 | 定位 |
+|:-----|:-----|
+| `src/flutter_gui/` | 当前图形控制端，复用 `vdtrace_ctl.exe` 与 Agent 通信，负责配置、启动/停止、模块、Dump、内存读写和日志查看 |
+| `vdtrace_ctl.exe` | 确定性 IPC CLI，适合脚本化 configure / start / stop / modules / dump / read / write |
+| `vdtrace_autostart.exe` | 自动启动器 CLI，负责插件部署、游戏启动和等待 trace 完成 |
+| `src/plugins/bepinex/` | IL2CPP 游戏内自动加载链路，按激活文件配置拉起 VDTrace |
+| `src/loaders/early_loader/` | 早期加载器链路，用于游戏启动早期阶段接入 |
+
+Python/Tkinter legacy GUI/CLI 已下线并删除；协议、配置和控制入口只维护 Flutter GUI、C++ CLI、自动启动和加载器链路。
+
+---
+
 ## 核心架构
 
 ### 异常驱动模型 (VEH Pipeline)
@@ -141,18 +155,27 @@ depthfilter=outside=2:edge,anon=all:tf,module=GameAssembly.dll:all:tf
 
 | 模块 | 产物 / 职责 |
 |:-----|:------------|
-| `src/VDTrace*.cpp` | 核心追踪引擎：VEH 管线、DR/TF 后端、指令解码、深度过滤、探针、增强采样、静态引用、环形队列 recorder |
-| `src/VDTraceHeapPeek*.cpp` | 堆内存观测模块：堆操作监控、inline suffix 输出、堆变化追踪 |
-| `src/VDTraceExtender*.cpp` | 扩展分析框架：可插拔事件处理、自定义分析逻辑、输出格式扩展 |
-| `src/agent/VDTraceAgent*.cpp` | Agent DLL：IPC 服务、Session 管理、模块 Dump+Fix、内存读写 |
-| `src/autostart/VDTraceAutoStart*.cpp` | 自动启动 Helper：INI 解析、il2cpp VEH 断点等待、Agent 加载与 configure/start |
-| `src/bepinex_plugin/VDTraceAutoStartPlugin.cs` | BepInEx 插件：IL2CPP 游戏引擎自动加载 VDTrace，支持激活文件配置 |
-| `src/early_loader/VDTraceEndfieldBaseProxy.cpp` | 早期加载器：游戏启动早期阶段追踪初始化，支持 Endfield 基础代理 |
-| `src/tools/vdtrace_ctl*.cpp` | IPC CLI 客户端：inject / configure / start / stop / modules / dump / read / write |
-| `src/tools/vdtrace_autostart*.cpp` | 自动启动器 CLI：插件部署、游戏启动、等待 trace 完成 |
-| `src/tools/VDTraceControlSupport*.cpp` | 控制端共享层：命名管道通信、DLL 注入、Loader 会话 |
-| `src/flutter_gui/` | Flutter Windows GUI 控制端，复用 `vdtrace_ctl.exe` 控制 Agent，兼容 `vdtrace_gui.ini` |
-| `src/python_gui/` | 旧 Python GUI / CLI 控制端，迁移期间保留为协议与配置自检对照 |
+| `src/core/runtime/` | 核心会话与运行态：配置、启动/停止、VEH 会话定位、执行状态 |
+| `src/core/hardware/` | DR/TF 后端：硬件断点编程、异常处理、上下文切换、transition/fallback |
+| `src/core/decoder/` | 指令解码与控制流分类，封装 Zydis 访问 |
+| `src/core/depth_filter/` | 深度过滤规则解析与运行时 resolve |
+| `src/core/probe/`、`src/core/observer/` | 探针、观测规则与事件捕获 |
+| `src/core/sampling/`、`src/core/preview/` | 增强采样、函数预览和内存值预览 |
+| `src/core/static_refs/` | 静态引用分析、格式化、JSON 导出 |
+| `src/core/recorder/` | 环形队列 recorder、格式化 Worker、异步 Writer |
+| `src/core/extender/` | 扩展分析框架：可插拔事件处理、自定义分析逻辑和输出扩展 |
+| `src/core/heap_peek/` | 堆内存观测：堆操作监控、inline suffix 输出、堆变化追踪 |
+| `src/core/threading/`、`src/core/trigger/`、`src/core/async/` | 线程捕获、触发等待、异步线程接力 |
+| `src/core/api/` | C API、DLL 入口和 IPC 基础结构适配 |
+| `src/agent/` | Agent DLL：IPC 服务、Session 管理、模块 Dump+Fix、内存读写 |
+| `src/autostart/` | 自动启动 Helper：INI 解析、il2cpp VEH 断点等待、Agent 加载与 configure/start |
+| `src/control/` | 控制端共享层：命名管道通信、DLL 注入、Loader 会话 |
+| `src/tools/vdtrace_ctl/` | IPC CLI 客户端：inject / configure / start / stop / modules / dump / read / write |
+| `src/tools/vdtrace_autostart/` | 自动启动器 CLI：插件部署、游戏启动、等待 trace 完成 |
+| `src/tools/examples/` | 控制端示例程序 |
+| `src/plugins/bepinex/` | BepInEx 插件：IL2CPP 游戏引擎自动加载 VDTrace，支持激活文件配置 |
+| `src/loaders/early_loader/` | 早期加载器：游戏启动早期阶段追踪初始化，支持 Endfield 基础代理 |
+| `src/flutter_gui/` | Flutter Windows GUI 当前图形控制端，复用 `vdtrace_ctl.exe` 控制 Agent |
 | `src/tests/` | Smoke 回归测试套件 |
 | `include/VDTrace/` | 公共 API 头文件 (`VDTrace.h`, `VDTraceC.h`, `VDTraceIpc.h`) |
 | `include/third_party/zydis/` | Zydis 反汇编引擎头文件 |
@@ -161,16 +184,42 @@ depthfilter=outside=2:edge,anon=all:tf,module=GameAssembly.dll:all:tf
 
 ## 构建
 
-### 核心引擎与工具
+### 核心引擎、Agent、工具与 smoke 测试
 
-使用 Visual Studio 2022 构建：
+在仓库根目录使用 Visual Studio 2022 x64 Release 构建入口：
 
 ```bat
-# 打开 VS Developer Command Prompt
-msbuild VDTrace.sln /p:Configuration=Release /p:Platform=x64
+cmd.exe /c "call build_release.bat"
 ```
 
-产物输出到 `bin\release\`，中间文件输出到 `obj\`。
+`build_release.bat` 会加载 VS2022 x64 开发环境，并通过 CMake 生成 / 构建 `Visual Studio 17 2022` x64 Release 工程。
+
+| 路径 | 说明 |
+|:-----|:-----|
+| `bin\release\` | DLL、LIB、CLI、helper、smoke test 等 Release 产物 |
+| `obj\cmake-x64-release\` | CMake 生成文件与编译中间文件 |
+
+构建覆盖的主要产物：
+
+| 产物 | 类型 | 说明 |
+|:-----|:-----|:-----|
+| `VDTraceStatic.lib` | 静态库 | 核心引擎，供测试 exe 链接 |
+| `VDTrace.dll` | DLL | 核心引擎动态库版本（导出 C API） |
+| `VDTraceAgent.dll` | DLL | 注入目标进程的追踪代理 |
+| `VDTraceAutoStart.dll` | DLL | 自动启动 Helper |
+| `VDTraceEndfieldBaseProxy.dll` | DLL | 早期加载器，游戏启动早期阶段追踪初始化 |
+| `VDTraceTriggerWaitHelper.dll` | DLL | trigger/root-stop smoke helper |
+| `VDTraceDecryptSmokeHelper.dll` | DLL | decrypt smoke helper |
+| `vdtrace_ctl.exe` | EXE | IPC 命令行客户端 |
+| `vdtrace_autostart.exe` | EXE | 自动启动器 |
+| `vdtrace_example.exe` | EXE | 控制端示例 |
+| `vdtrace_*_smoke_test.exe` | EXE | smoke 回归测试 |
+
+Release smoke 套件运行方式：
+
+```bat
+cmd.exe /c "cd /d E:\科研\VD-Trace\bin\release && vdtrace_smoke_suite_test.exe"
+```
 
 ### Flutter GUI
 
@@ -180,33 +229,21 @@ msbuild VDTrace.sln /p:Configuration=Release /p:Platform=x64
 E:\KDR\flutter\bin\flutter.bat build windows --release
 ```
 
-Flutter release 产物位于 `src\flutter_gui\build\windows\x64\runner\Release\vdtrace_gui.exe`。
+Flutter release 产物位于 `src\flutter_gui\build\windows\x64\runner\Release\vdtrace_gui.exe`，集成交付时复制到 `bin\release\`。
 
 ### BepInEx 插件
 
 使用 .NET SDK 构建：
 
 ```bat
-dotnet build src\bepinex_plugin\VDTraceAutoStartPlugin.csproj -c Release
+dotnet build src\plugins\bepinex\VDTraceAutoStartPlugin.csproj -c Release
 ```
 
-产物为 `VDTraceAutoStartPlugin.dll`，部署到 BepInEx 插件目录。
+插件产物输出到 `bin\release\bepinex_plugin\`，部署时复制 `VDTraceAutoStartPlugin.dll` 到 BepInEx 插件目录。
 
 ### 早期加载器
 
 包含在核心引擎构建中，产物为 `VDTraceEndfieldBaseProxy.dll`。
-
-| 产物 | 类型 | 说明 |
-|:-----|:-----|:-----|
-| `VDTraceStatic.lib` | 静态库 | 核心引擎，供测试 exe 链接 |
-| `VDTrace.dll` | DLL | 核心引擎动态库版本（导出 C API） |
-| `VDTraceAgent.dll` | DLL | 注入目标进程的追踪代理 |
-| `VDTraceAutoStart.dll` | DLL | 自动启动 Helper |
-| `VDTraceEndfieldBaseProxy.dll` | DLL | 早期加载器，游戏启动早期阶段追踪初始化 |
-| `VDTraceAutoStartPlugin.dll` | DLL | BepInEx 插件，IL2CPP 游戏引擎自动加载 |
-| `vdtrace_ctl.exe` | EXE | IPC 命令行客户端 |
-| `vdtrace_autostart.exe` | EXE | 自动启动器 |
-| `vdtrace_gui.exe` | EXE | Flutter GUI 控制端 |
 
 ---
 
@@ -223,8 +260,8 @@ dotnet build src\bepinex_plugin\VDTraceAutoStartPlugin.csproj -c Release
 
 ## 仓库提交规则
 
-- 提交范围：`src/`、`include/`、`README.md`、`.gitignore`
-- 忽略范围：`bin/`、`obj/`、`docs/`、`tools/`、`ref_pic/`、`backup/`、`*.ini`、`*.log`、`*.bat`、测试产物、构建中间文件
+- 提交范围：`src/`、`include/`、`README.md`、`Task-Status.md`、`.gitignore`、`.clangd`、`NuGet.config`、`CMakeLists.txt`、`build_release.bat`
+- 忽略范围：`bin/`、`obj/`、`docs/`、`tools/`、`ref_pic/`、`backup/`、`*.ini`、`*.log`、测试产物、构建中间文件
 
 <div align="center">
 

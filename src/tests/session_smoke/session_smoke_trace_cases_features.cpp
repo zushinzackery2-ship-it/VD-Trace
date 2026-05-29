@@ -1,6 +1,6 @@
 #include "session_smoke_cli.h"
 #include "session_smoke_trace_internal.h"
-#include "VDTraceHeapPeekInternal.h"
+#include "core/heap_peek/VDTraceHeapPeekInternal.h"
 
 #include <sstream>
 

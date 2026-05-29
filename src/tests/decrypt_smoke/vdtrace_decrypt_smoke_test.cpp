@@ -114,9 +114,11 @@ int wmain()
         options.module_names = {exe_name};
         options.max_events = 40000;
         options.trace_outside_modules = true;
+        options.backend = vdtrace::TraceBackend::TfFullTrace;
         options.control_flow_only = true;
         options.max_call_depth = 10;
-        options.hit_policy = vdtrace::FlowHitPolicy::EveryHit;
+        options.hit_policy = vdtrace::FlowHitPolicy::FirstSeen;
+        options.hot_bypass_threshold = 4;
         options.enhanced_sampling = true;
         options.trigger_module_name = exe_name;
         options.trigger_address = trigger_address;

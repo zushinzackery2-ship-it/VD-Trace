@@ -1,4 +1,4 @@
-#include "tools/VDTraceControlSupport.h"
+#include "control/ipc_client/VDTraceControlSupport.h"
 
 #include <Windows.h>
 
