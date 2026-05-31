@@ -6,6 +6,8 @@
 
 ## 2. 已解决问题 / 已完成需求
 
+- 已将原中文 `README.md` 拆分为 `README_CN.md`，并新增英文版 `README.md`；同时显式忽略本地申请素材和索引缓存，避免误提交临时文件。
+- 已新增 `Codex-OSS-Capability-Document.md`，集中整理 VD-Trace 项目定位、核心能力、维护复杂度、开源生态价值、安全边界和可供 Codex for Open Source 申请文案复用的英文素材。
 - 已清理单游戏专项入口与 WinHTTP 历史命名：Loader IPC 统一为 `VDTraceLoaderControl`，移除专项 proxy 构建/源码/BepInEx 进程绑定/恢复逻辑，默认 trace/profile 不再写死固定目标 RVA。
 - 已将 2026-05-09 提交 `7f02012` 导出到 `ref_pic/vdtrace_2026-05-09_7f02012/` 作为老版本参考。
 - 已确认 2026-05-09 老版本与当前版本核心 Win32 API 使用面基本一致：ToolHelp32、OpenThread、Get/SetThreadContext、VEH、VirtualQuery/Protect、注入链均沿用同类机制；当前主要是目录重构和控制端迁移。

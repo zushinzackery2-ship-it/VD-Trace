@@ -2,217 +2,269 @@
 
 # VD-Trace
 
-**Windows x64 Runtime Control-Flow Trace Framework**
+**Windows x64 Runtime Control-Flow Tracing and Diagnostics Toolkit**
 
-*Hardware breakpoint-driven tracing | DR primary + TF fallback | Ring-buffer async recorder*
+*Hardware breakpoint tracing | DR-first backend with TF fallback | Agent IPC | Dump+Fix | Flutter GUI*
 
 ![C++](https://img.shields.io/badge/C%2B%2B-20-blue?style=flat-square)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20x64-lightgrey?style=flat-square)
 ![Toolchain](https://img.shields.io/badge/Toolchain-Visual%20Studio%202022-green?style=flat-square)
 ![Disasm](https://img.shields.io/badge/Disassembler-Zydis-orange?style=flat-square)
 
+[中文文档](README_CN.md)
+
 </div>
 
 ---
 
-> [!NOTE]
-> **当前定位**
-> VD-Trace 以硬件调试寄存器（DR0-DR3）为主后端，在基本块粒度上捕获控制流边；仅在匿名执行页、深度过滤 TF 区域或探针单步场景下临时切入 Trap Flag 模式。
-> 主线工作流为 `autostart + BepInEx plugin` 直接注入；`winhttp.dll` 在线会话仅保留兼容用途。
+## Overview
+
+VD-Trace is an open-source Windows x64 runtime tracing and diagnostics toolkit for authorized debugging, research, and reproducible native process analysis.
+
+It combines a DR0-DR3 hardware-breakpoint tracing backend, localized Trap Flag fallback, Windows VEH dispatch, an in-process Agent, named-pipe IPC control, runtime module Dump+Fix, memory inspection, autostart workflows, CLI automation, and a Flutter Windows GUI.
+
+The project is designed as reusable tracing infrastructure rather than a target-specific tool. Current public workflows are centered around VDTrace naming, configurable profiles, and generic Loader/Agent control paths.
 
 ---
 
-## 功能概览
+## What VD-Trace Helps With
 
-| 功能 | 说明 |
-|:-----|:-----|
-| **DR 基本块追踪** | 在基本块尾部的控制流指令处设置硬件执行断点，每个基本块仅触发一次 VEH 异常 |
-| **TF 局部回退** | 匿名页 / 深度过滤 TF 区域 / 探针 step 模式下临时切入单步，退出后自动恢复 DR |
-| **深度过滤** | `depth_filter_spec` 支持模块外、匿名执行页、指定模块三级独立层级与执行模式覆盖 |
-| **热旁路逃逸** | `hot_bypass_threshold` 识别热点循环后 DR 重编程至退出点，避免日志爆炸 |
-| **触发点** | `trigger_point` 支持绝对地址 / `module!RVA`，命中后才正式开始追踪 |
-| **线程自动捕获** | 所有线程同时挂载 DR，首个命中线程通过原子竞争晋升为追踪目标 |
-| **异步线程接力** | 检测 `CreateThread` / `_beginthreadex` 等 API 后自动切换到新线程继续追踪 |
-| **探针观测** | `probe_spec` 支持 Capture（截获寄存器/内存）、Step（TF 步进）、Write（缓冲区变化监控）三种模式 |
-| **增强采样** | 跨模块 call/return 时自动抓取参数缓冲区 before/after 快照并 diff 输出 |
-| **静态引用分析** | 基本块内 RIP-relative 内存引用自动解析为 `.data/.rdata` 槽位映射，伴生 `*.static_refs.json` |
-| **环形队列 + 异步落盘** | 65 万级预分配 Ring Buffer + Worker 格式化线程 + Writer 写盘线程，三级流水线背压控制 |
-| **IPC Agent** | `VDTraceAgent.dll` 注入目标进程后通过命名管道提供 configure / start / stop / modules / dump / memory R/W 服务 |
-| **运行时 PE 修正** | Agent 内置 Dump+Fix，修正节表偏移并清除无效 Security 目录，输出可被 IDA 直接加载的 PE |
-| **frida-trace 风格输出** | 缩进 call/return 调用树 + 参数/返回值内存预览 + 首次命中函数反汇编预览 |
-| **HeapPeek 堆观测** | 运行时堆内存变化监控，支持 inline suffix 输出和堆操作追踪 |
-| **Extender 扩展分析** | 可插拔的事件处理扩展框架，支持自定义分析逻辑和输出格式 |
-| **BepInEx 自动启动** | BepInEx 插件形式自动加载 VDTrace，支持 IL2CPP 游戏引擎 |
+| Problem | VD-Trace capability |
+|:--|:--|
+| Runtime control flow is hard to reproduce | Captures basic-block-level control-flow edges and call/return transitions |
+| Full single-step tracing is too expensive | Uses hardware breakpoints as the primary path and Trap Flag only where needed |
+| Dynamic or anonymous executable pages need finer observation | Supports per-region depth filters and localized TF tracing |
+| No source-level logs are available | Uses an in-process Agent to expose controlled runtime diagnostics |
+| Runtime modules need post-processing before analysis | Dumps loaded modules and repairs PE layout for follow-up tooling |
+| Manual setup is repetitive | Provides CLI, Flutter GUI, Loader Control IPC, and BepInEx/autostart workflows |
+| Trace output can explode in hot loops | Includes hot-path bypass logic to reduce repetitive trace noise |
 
 ---
 
-## 当前控制入口
+## Feature Summary
 
-| 入口 | 定位 |
-|:-----|:-----|
-| `src/flutter_gui/` | 当前图形控制端，复用 `vdtrace_ctl.exe` 与 Agent 通信，负责配置、启动/停止、模块、Dump、内存读写和日志查看 |
-| `vdtrace_ctl.exe` | 确定性 IPC CLI，适合脚本化 configure / start / stop / modules / dump / read / write |
-| `vdtrace_autostart.exe` | 自动启动器 CLI，负责插件部署、游戏启动和等待 trace 完成 |
-| `src/plugins/bepinex/` | IL2CPP 游戏内自动加载链路，按激活文件配置拉起 VDTrace |
-| `src/loaders/early_loader/` | 早期加载器链路，用于游戏启动早期阶段接入 |
-
-Python/Tkinter legacy GUI/CLI 已下线并删除；协议、配置和控制入口只维护 Flutter GUI、C++ CLI、自动启动和加载器链路。
+| Area | Capability |
+|:--|:--|
+| Control-flow tracing | DR0-DR3 execution breakpoints, basic-block edge capture, call/return tree output |
+| Trap Flag fallback | Localized single-step mode for anonymous pages, probe stepping, write watch, and indirect edges |
+| Depth filtering | Independent policies for traced modules, outside modules, anonymous executable pages, and selected DLLs |
+| Triggered tracing | Starts trace collection only after a configured address or `module!RVA` is reached |
+| Thread handling | Automatic thread capture, active-thread promotion, async handoff, and queued trigger handling |
+| Probe observation | Register capture, fixed-address memory capture, pointer-relative memory capture, step mode, write-watch mode |
+| Enhanced sampling | Captures before/after previews around selected cross-module call/return transitions |
+| Static references | Extracts RIP-relative memory references and emits companion static reference metadata |
+| Async recording | Preallocated ring buffer, formatting worker, writer worker, and backpressure control |
+| Agent IPC | Configure, start, stop, status, list modules, dump module, read memory, write memory, shutdown |
+| Dump+Fix | Exports loaded modules and repairs runtime PE layout for downstream analysis tools |
+| HeapPeek | Tracks selected heap activity and memory changes during runtime observation |
+| Extender | Pluggable event processing layer for future custom analysis outputs |
+| GUI workflow | Flutter Windows GUI for target discovery, Agent loading, module refresh, Dump+Fix, trace control, and output viewing |
+| CLI workflow | Deterministic command-line control through `vdtrace_ctl.exe` and `vdtrace_autostart.exe` |
+| Autostart | BepInEx plugin and activation-file based autostart for IL2CPP/BepInEx application scenarios |
 
 ---
 
-## 核心架构
-
-### 异常驱动模型 (VEH Pipeline)
-
-系统完全构建于 Windows VEH（Vectored Exception Handling）之上：
-
-- **VEH 入口**：`AddVectoredExceptionHandler(1, ...)` 注册最高优先级 handler，分发 `EXCEPTION_SINGLE_STEP` 异常
-- **无锁 Session 定位**：`std::atomic<Session::Impl*> g_active_impl` 原子指针，VEH 热路径零 mutex
-- **指令分类**：Zydis 反汇编引擎将指令映射为 Call / Jump / ConditionalJump / Return / Syscall / Interrupt 六类控制流节点
-- **模块二分查找**：`module_ranges` 按基址排序后 `std::upper_bound` O(log n) 定位
-- **线程本地 region 缓存**：`thread_local VirtualQuery` 缓存避免热路径内核调用
-
-### 双模后端
-
-| 模式 | 触发条件 | DR 编程策略 |
-|:-----|:---------|:------------|
-| **DR (主力)** | 模块内正常追踪 | 条件跳转 → Dr0=target, Dr1=fallthrough；直接 call/jmp → Dr0=target；间接 → Dr0=tail 单步一次 |
-| **TF (辅助)** | 匿名页 / 深度过滤 TF 规则 / 探针 step/write / 等待间接目标 | 设置 EFlags.TF，每条指令触发异常，退出区域后 `RestoreHardwareFlowAfterTrapWindow()` 恢复 DR |
-
-### 三级流水线异步 I/O
+## Main Workflow
 
 ```text
-VEH Handler (被追踪线程上下文)
-    │ callback(event) → Enqueue()
-    ▼
-[Stage 1] Ring Buffer — 655360 条预分配 StepEvent，队列满时 producer_cv.wait() 阻塞
-    │ worker_cv.notify_one() (仅从空→非空时唤醒)
-    ▼
-[Stage 2] WorkerLoop — 批量 drain，格式化 / 地址标注 / API 识别 / 函数预览 / static_refs 分析
-    │ EnqueueWrite() (16MB 背压上限)
-    ▼
-[Stage 3] WriterLoop — WriteFile() 落盘
+Flutter GUI / CLI / autostart
+    │
+    ├─ Loader Control IPC: \\.\pipe\VDTraceLoaderControl
+    │      └─ requests target-side loading of VDTraceAgent.dll
+    │
+    └─ Agent IPC: \\.\pipe\VDTrace-<pid>
+           ├─ configure / start / stop / status
+           ├─ modules / dump
+           ├─ memory read / memory write
+           └─ shutdown
+
+Target process
+    ├─ VDTraceAgent.dll
+    └─ VDTrace core runtime
+           ├─ DR hardware-breakpoint backend
+           ├─ localized TF fallback backend
+           ├─ VEH exception dispatch
+           ├─ depth filters / probes / static refs / HeapPeek / Extender
+           └─ ring buffer → formatter worker → writer worker
 ```
 
-### 深度过滤系统
+VD-Trace supports three practical usage modes:
+
+1. **Interactive workflow** through the Flutter Windows GUI.
+2. **Scripted workflow** through deterministic CLI commands.
+3. **Autostart workflow** through BepInEx plugin activation and `vdtrace_autostart.exe`.
+
+---
+
+## Core Tracing Model
+
+### DR-first tracing
+
+The normal tracing path uses x64 hardware debug registers. VD-Trace places execution breakpoints on control-flow boundaries and records transitions when the traced thread reaches those points.
+
+This keeps normal module tracing lighter than full single-step execution while preserving a useful runtime control-flow view.
+
+### Local TF fallback
+
+Trap Flag mode is used only for localized cases where hardware breakpoints are not enough or too coarse:
+
+- anonymous executable pages
+- probe step mode
+- write-watch mode
+- selected depth-filter regions
+- short indirect-edge windows
+
+After the local window ends, VD-Trace restores hardware-breakpoint tracing.
+
+### Depth filters
+
+Depth filters keep trace output focused on relevant code regions.
+
+Example:
 
 ```text
-depthfilter=outside=2:edge,anon=all:tf,module=GameAssembly.dll:all:tf
+depthfilter=outside=2:edge,anon=all:tf,module=TargetModule.dll:all:tf
 ```
 
-| 规则类型 | 语法 | 语义 |
-|:---------|:-----|:-----|
-| 模块外 | `outside=<depth>[:edge\|tf]` | PE 映像但非追踪模块的代码区域 |
-| 匿名页 | `anon=<depth>[:edge\|tf]` | 非 PE 映像的可执行内存（JIT 代码） |
-| 指定模块 | `module=<name>:<depth>[:edge\|tf]` | 为特定 DLL 定义独立层级与执行模式 |
+| Rule | Meaning |
+|:--|:--|
+| `outside=<depth>[:edge\|tf]` | Policy for executable PE regions outside selected traced modules |
+| `anon=<depth>[:edge\|tf]` | Policy for anonymous executable memory such as JIT/codegen pages |
+| `module=<name>:<depth>[:edge\|tf]` | Independent policy for a selected DLL |
 
-`edge` 模式使用 DR 硬件断点；`tf` 模式在该区域局部切入 Trap Flag 单步，退出区域后自动恢复 DR。
+### Trigger point
 
-### 热旁路 (Hot Bypass)
+A trigger point can delay trace collection until a specific absolute address or `module!RVA` is reached. This avoids startup noise and makes focused runtime experiments easier to reproduce.
 
-当 `hit_policy=first` 下同一条件跳转边被重复命中超过 `hot_bypass_threshold`（默认 32）次时：
-1. 计算循环退出地址（fallthrough 或跳转对端）
-2. 将 DR 重编程至退出点
-3. 进入 `WaitingForHotReturn` 沉睡态
-4. 循环结束后恢复正常追踪
+### Hot-path bypass
 
-### 探针规格 (probe_spec)
-
-三种观测模式，分号分隔多条规则：
-
-| 模式 | 语法 | 运行时行为 |
-|:-----|:-----|:-----------|
-| **Capture** | `hit->reg:rcx\|mem:0xADDR:size[:label]` | VEH 中同步读取 CONTEXT 寄存器 / 固定地址内存 |
-| **Step** | `step@hit steps=N exit=return\|leave\|return-or-leave` | 命中后临时切入 TF，每步发射 Probe 事件 |
-| **Write** | `write@hit watch=addr:size[:label]\|... steps=N exit=...` | TF 单步 + 每步 memcmp watch 目标，仅变化时输出 |
-
-支持 `reg:rcx`、`mem:module!0xRVA:32`、`ptr:rcx+0x10:32` 三种操作数格式。
-
-### 线程模型
-
-- **自动捕获**：`BeginTriggerThreadCapture()` 枚举全部线程，在触发地址挂 DR；`StartTriggerCaptureRefreshWorker()` 每 10ms 刷新新线程
-- **原子竞争**：首个命中线程通过 `compare_exchange_strong` 从 0 晋升为 `active_thread_id`
-- **block_main_thread**：主线程加入 `known_thread_ids` 但不挂断点，自然跳过
-- **异步接力**：命中 `CreateThread` 后解析入口参数 → 后台 Worker 轮询新线程就绪 → 原子切换追踪上下文
-- **排队模式**：`queue_trigger_threads` 启用时后续命中线程被 park，当前追踪结束后 `RotateQueuedTriggerTrace()` 切换
-
-### IPC Agent 协议
-
-| 字段 | 说明 |
-|:-----|:-----|
-| 管道名 | `\\.\pipe\VDTrace-<PID>` |
-| 协议版本 | `kIpcVersion = 17` |
-| 通信模式 | 请求-响应，消息模式 (`PIPE_TYPE_MESSAGE`) |
-| 请求结构 | `IpcCommand` (~16KB)：version + type + payload union |
-| 响应结构 | `IpcResponse`：version + status + message[16384] |
-
-支持命令：Ping / Configure / Start / Stop / Status / ListModules / DumpModule / ReadMemory / WriteMemory / Shutdown
+Tight loops can produce excessive repeated events. VD-Trace detects repeated branch hits above a threshold and temporarily moves attention to the loop exit point, reducing trace explosion while preserving transition behavior.
 
 ---
 
-## 源码结构
+## Runtime Diagnostics
 
-| 模块 | 产物 / 职责 |
-|:-----|:------------|
-| `src/core/runtime/` | 核心会话与运行态：配置、启动/停止、VEH 会话定位、执行状态 |
-| `src/core/hardware/` | DR/TF 后端：硬件断点编程、异常处理、上下文切换、transition/fallback |
-| `src/core/decoder/` | 指令解码与控制流分类，封装 Zydis 访问 |
-| `src/core/depth_filter/` | 深度过滤规则解析与运行时 resolve |
-| `src/core/probe/`、`src/core/observer/` | 探针、观测规则与事件捕获 |
-| `src/core/sampling/`、`src/core/preview/` | 增强采样、函数预览和内存值预览 |
-| `src/core/static_refs/` | 静态引用分析、格式化、JSON 导出 |
-| `src/core/recorder/` | 环形队列 recorder、格式化 Worker、异步 Writer |
-| `src/core/extender/` | 扩展分析框架：可插拔事件处理、自定义分析逻辑和输出扩展 |
-| `src/core/heap_peek/` | 堆内存观测：堆操作监控、inline suffix 输出、堆变化追踪 |
-| `src/core/threading/`、`src/core/trigger/`、`src/core/async/` | 线程捕获、触发等待、异步线程接力 |
-| `src/core/api/` | C API、DLL 入口和 IPC 基础结构适配 |
-| `src/agent/` | Agent DLL：IPC 服务、Session 管理、模块 Dump+Fix、内存读写 |
-| `src/autostart/` | 自动启动 Helper：INI 解析、il2cpp VEH 断点等待、Agent 加载与 configure/start |
-| `src/control/` | 控制端共享层：命名管道通信、DLL 注入、Loader 会话 |
-| `src/tools/vdtrace_ctl/` | IPC CLI 客户端：inject / configure / start / stop / modules / dump / read / write |
-| `src/tools/vdtrace_autostart/` | 自动启动器 CLI：插件部署、游戏启动、等待 trace 完成 |
-| `src/tools/examples/` | 控制端示例程序 |
-| `src/plugins/bepinex/` | BepInEx 插件：IL2CPP 游戏引擎自动加载 VDTrace，支持激活文件配置 |
-| `src/flutter_gui/` | Flutter Windows GUI 当前图形控制端，复用 `vdtrace_ctl.exe` 控制 Agent |
-| `src/tests/` | Smoke 回归测试套件 |
-| `include/VDTrace/` | 公共 API 头文件 (`VDTrace.h`, `VDTraceC.h`, `VDTraceIpc.h`) |
-| `include/third_party/zydis/` | Zydis 反汇编引擎头文件 |
+After `VDTraceAgent.dll` is loaded into a target process, control clients can communicate with it through a named pipe.
+
+| Command group | Purpose |
+|:--|:--|
+| Ping / Status | Check Agent availability and session state |
+| Configure | Send trace settings, module filters, output path, trigger point, and probe settings |
+| Start / Stop | Start or stop a trace session |
+| ListModules | Enumerate loaded modules in the target process |
+| DumpModule | Export and repair a loaded PE module |
+| ReadMemory | Read target memory for diagnostics |
+| WriteMemory | Write target memory in authorized debugging scenarios |
+| Shutdown | Stop the Agent IPC service |
 
 ---
 
-## 构建
+## Dump+Fix
 
-### 核心引擎、Agent、工具与 smoke 测试
+VD-Trace includes a runtime module dumping path in the Agent. It exports a loaded module from the target process and repairs common runtime PE layout issues so the output is more suitable for tools such as IDA or Ghidra.
 
-在仓库根目录使用 Visual Studio 2022 x64 Release 构建入口：
+This is useful when the on-disk file is not enough to understand the loaded runtime image.
+
+---
+
+## Flutter GUI
+
+The Flutter Windows GUI is the current primary graphical control surface.
+
+| GUI workflow | Description |
+|:--|:--|
+| Automatic target discovery | Finds Loader Control sessions and presents the current target |
+| Agent loading | Sends `LoadDllRequest` to load `VDTraceAgent.dll` into the target |
+| Agent readiness checks | Ensures the Agent is online before dump, memory, or trace operations |
+| Module refresh | Loads the real module list from the target process |
+| Dump+Fix | Selects a real module and exports a repaired dump |
+| Output view | Displays CLI/Agent results and workflow status |
+| Regression coverage | Includes Loader IPC simulation tests and controller workflow tests |
+
+---
+
+## CLI Tools
+
+| Tool | Role |
+|:--|:--|
+| `vdtrace_ctl.exe` | Agent IPC client for inject, configure, start, stop, modules, dump, read, write, and status workflows |
+| `vdtrace_autostart.exe` | Autostart helper for plugin deployment, target launch, and trace completion waiting |
+| `vdtrace_example.exe` | Example control client |
+
+The CLI path is intended for reproducible experiments, automation, and regression testing.
+
+---
+
+## Autostart and BepInEx
+
+VD-Trace supports a generic BepInEx/autostart workflow for IL2CPP/BepInEx application scenarios.
+
+The autostart path is configuration-driven:
+
+- activation file provides helper/config/log paths
+- BepInEx plugin loads the VDTrace autostart helper
+- autostart CLI can deploy the plugin and launch the target
+- default public configuration does not bind to a single process name, game name, module, or fixed RVA
+
+---
+
+## Source Layout
+
+| Path | Responsibility |
+|:--|:--|
+| `include/VDTrace/` | Public C/C++ API headers |
+| `include/third_party/zydis/` | Zydis public header |
+| `src/core/runtime/` | Session lifecycle, runtime state, configuration |
+| `src/core/hardware/` | DR/TF backend, exception handling, hardware context transitions |
+| `src/core/decoder/` | Instruction decoding and control-flow classification |
+| `src/core/depth_filter/` | Depth-filter parsing and runtime policy resolution |
+| `src/core/probe/`, `src/core/observer/` | Probe and observation rules |
+| `src/core/sampling/`, `src/core/preview/` | Enhanced sampling and output previews |
+| `src/core/static_refs/` | Static reference extraction and metadata output |
+| `src/core/recorder/` | Ring buffer, formatter worker, writer worker |
+| `src/core/extender/` | Pluggable event processing and analysis extension layer |
+| `src/core/heap_peek/` | Heap observation support |
+| `src/core/threading/`, `src/core/trigger/`, `src/core/async/` | Thread capture, trigger waiting, async handoff |
+| `src/core/api/` | DLL entry points and C API integration |
+| `src/agent/` | In-process Agent IPC, module dump, memory access, session management |
+| `src/autostart/` | Autostart helper, config parsing, Agent loading |
+| `src/control/` | Shared control-side IPC, injection, and Loader session support |
+| `src/tools/vdtrace_ctl/` | Main command-line Agent controller |
+| `src/tools/vdtrace_autostart/` | Autostart command-line workflow |
+| `src/tools/examples/` | Example control program |
+| `src/plugins/bepinex/` | BepInEx plugin for autostart activation |
+| `src/flutter_gui/` | Flutter Windows GUI |
+| `src/tests/` | Smoke and workflow regression tests |
+| `src/third_party/zydis/` | Embedded Zydis source used by the build |
+
+---
+
+## Build
+
+### Core engine, Agent, tools, and smoke tests
+
+Run from the repository root on Windows with Visual Studio 2022 installed:
 
 ```bat
 cmd.exe /c "call build_release.bat"
 ```
 
-`build_release.bat` 会加载 VS2022 x64 开发环境，并通过 CMake 生成 / 构建 `Visual Studio 17 2022` x64 Release 工程。
+Main Release outputs are generated under `bin\release\`.
 
-| 路径 | 说明 |
-|:-----|:-----|
-| `bin\release\` | DLL、LIB、CLI、helper、smoke test 等 Release 产物 |
-| `obj\cmake-x64-release\` | CMake 生成文件与编译中间文件 |
+| Output | Type | Purpose |
+|:--|:--|:--|
+| `VDTraceStatic.lib` | static library | Core engine for tests and static consumers |
+| `VDTrace.dll` | DLL | Core engine dynamic library with exported C API |
+| `VDTraceAgent.dll` | DLL | In-process target Agent |
+| `VDTraceAutoStart.dll` | DLL | Autostart helper |
+| `VDTraceTriggerWaitHelper.dll` | DLL | Trigger/root-stop smoke helper |
+| `VDTraceDecryptSmokeHelper.dll` | DLL | Decrypt smoke helper |
+| `vdtrace_ctl.exe` | EXE | Agent IPC CLI client |
+| `vdtrace_autostart.exe` | EXE | Autostart CLI |
+| `vdtrace_example.exe` | EXE | Example controller |
+| `vdtrace_*_smoke_test.exe` | EXE | Regression smoke tests |
 
-构建覆盖的主要产物：
-
-| 产物 | 类型 | 说明 |
-|:-----|:-----|:-----|
-| `VDTraceStatic.lib` | 静态库 | 核心引擎，供测试 exe 链接 |
-| `VDTrace.dll` | DLL | 核心引擎动态库版本（导出 C API） |
-| `VDTraceAgent.dll` | DLL | 注入目标进程的追踪代理 |
-| `VDTraceAutoStart.dll` | DLL | 自动启动 Helper |
-| `VDTraceTriggerWaitHelper.dll` | DLL | trigger/root-stop smoke helper |
-| `VDTraceDecryptSmokeHelper.dll` | DLL | decrypt smoke helper |
-| `vdtrace_ctl.exe` | EXE | IPC 命令行客户端 |
-| `vdtrace_autostart.exe` | EXE | 自动启动器 |
-| `vdtrace_example.exe` | EXE | 控制端示例 |
-| `vdtrace_*_smoke_test.exe` | EXE | smoke 回归测试 |
-
-Release smoke 套件运行方式：
+Run the smoke suite after building:
 
 ```bat
 cmd.exe /c "cd /d E:\科研\VD-Trace\bin\release && vdtrace_smoke_suite_test.exe"
@@ -220,41 +272,75 @@ cmd.exe /c "cd /d E:\科研\VD-Trace\bin\release && vdtrace_smoke_suite_test.exe
 
 ### Flutter GUI
 
-使用本机 SDK 构建：
-
 ```bat
 E:\KDR\flutter\bin\flutter.bat build windows --release
 ```
 
-Flutter release 产物位于 `src\flutter_gui\build\windows\x64\runner\Release\vdtrace_gui.exe`，集成交付时复制到 `bin\release\`。
+Flutter Release output:
 
-### BepInEx 插件
+```text
+src\flutter_gui\build\windows\x64\runner\Release\vdtrace_gui.exe
+```
 
-使用 .NET SDK 构建：
+### BepInEx plugin
 
 ```bat
 dotnet build src\plugins\bepinex\VDTraceAutoStartPlugin.csproj -c Release
 ```
 
-插件产物输出到 `bin\release\bepinex_plugin\`，部署时复制 `VDTraceAutoStartPlugin.dll` 到 BepInEx 插件目录。
+The plugin output is placed under `bin\release\bepinex_plugin\`.
 
 ---
 
-## 当前限制
+## Verification
 
-| 限制 | 说明 |
-|:-----|:-----|
-| 单会话 | 一进程只支持一个活动 Trace 会话 |
-| 间接 call/jmp | 只做基础分类，不保证总能还原目标地址 |
-| VEH 回调开销 | 回调运行在异常处理路径里，逻辑必须尽量轻 |
-| 硬件断点数量 | x86-64 仅 4 个 DR 寄存器，条件跳转需占用 2 个 |
+Common verification commands:
+
+```bat
+cmd.exe /c "call build_release.bat"
+cmd.exe /c "cd /d E:\科研\VD-Trace\bin\release && vdtrace_smoke_suite_test.exe"
+dotnet build src\plugins\bepinex\VDTraceAutoStartPlugin.csproj -c Release
+E:\KDR\flutter\bin\flutter.bat analyze
+E:\KDR\flutter\bin\flutter.bat test
+```
 
 ---
 
-## 仓库提交规则
+## Current Limitations
 
-- 提交范围：`src/`、`include/`、`README.md`、`Task-Status.md`、`.gitignore`、`.clangd`、`NuGet.config`、`CMakeLists.txt`、`build_release.bat`
-- 忽略范围：`bin/`、`obj/`、`docs/`、`tools/`、`ref_pic/`、`backup/`、`*.ini`、`*.log`、测试产物、构建中间文件
+| Limitation | Notes |
+|:--|:--|
+| Single active trace session | One process currently supports one active VDTrace session |
+| Indirect calls/jumps | Basic classification is supported, but target reconstruction is not always guaranteed |
+| VEH callback cost | Exception-path logic must remain small and predictable |
+| Hardware breakpoint count | x86-64 provides only four hardware debug registers; conditional branches can consume two |
+
+---
+
+## Safety and Intended Use
+
+VD-Trace is intended for authorized debugging, diagnostics, runtime research, and reproducible engineering workflows.
+
+The repository is maintained as a general-purpose Windows runtime tracing toolkit. Public defaults avoid target-specific process names, fixed module assumptions, and hardcoded RVAs. Security-sensitive changes such as loader behavior, Agent IPC, memory operations, and autostart paths should be reviewed carefully and covered by regression tests.
+
+---
+
+## Repository Policy
+
+Tracked public source/documentation scope:
+
+- `src/`
+- `include/`
+- `README.md`
+- `README_CN.md`
+- `Task-Status.md`
+- `.gitignore`
+- `.clangd`
+- `NuGet.config`
+- `CMakeLists.txt`
+- `build_release.bat`
+
+Ignored local/generated scope includes build outputs, logs, runtime INI files, IDE metadata, local index caches, and local application-material drafts.
 
 <div align="center">
 

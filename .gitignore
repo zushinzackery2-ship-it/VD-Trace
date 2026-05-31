@@ -1,10 +1,11 @@
-# Only source code and README belong in this branch
+# Only source code and public documentation belong in this branch
 
 # Ignore everything by default
 /*
 
 # But allow these
 !/README.md
+!/README_CN.md
 !/.gitignore
 !/.clangd
 !/NuGet.config
@@ -13,6 +14,13 @@
 !/Task-Status.md
 !/src/
 !/include/
+
+# Local application/application-material drafts and indexes
+/.auto-index-mcp/
+/Codex-OSS-Capability-Document.md
+/src/flutter_gui/.idea/
+/src/flutter_gui/vdtrace_gui.iml
+/src/python_gui/
 
 # Within src/, ignore build artifacts, __pycache__, etc.
 /src/__pycache__/
