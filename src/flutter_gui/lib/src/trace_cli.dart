@@ -6,7 +6,7 @@ import 'models.dart';
 
 class TraceCli
 {
-  const TraceCli({required this.ctlPath, required this.workdir});
+  TraceCli({required this.ctlPath, required this.workdir});
 
   final String ctlPath;
   final Directory workdir;

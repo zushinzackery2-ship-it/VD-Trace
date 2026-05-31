@@ -21,9 +21,10 @@ constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 constexpr UINT kVdTraceMinimizeMessage = WM_APP + 0x501;
 constexpr UINT kVdTraceMaximizeRestoreMessage = WM_APP + 0x502;
 constexpr UINT kVdTraceCloseMessage = WM_APP + 0x503;
+constexpr DWORD kFramelessStyle = WS_POPUP | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+constexpr DWORD kNativeFrameMask = WS_CAPTION | WS_BORDER | WS_DLGFRAME | WS_SYSMENU;
+constexpr DWORD kNativeFrameExMask = WS_EX_DLGMODALFRAME | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE;
 constexpr int kResizeBorderWidth = 8;
-constexpr int kDragCaptionHeight = 70;
-constexpr int kDragCaptionWidth = 330;
 
 /// Registry key for app theme preference.
 ///
@@ -58,6 +59,22 @@ void EnableFullDpiSupportIfAvailable(HWND hwnd) {
     enable_non_client_dpi_scaling(hwnd);
   }
   FreeLibrary(user32_module);
+}
+
+void ApplyFramelessStyle(HWND window)
+{
+  LONG_PTR style = GetWindowLongPtr(window, GWL_STYLE);
+  style &= ~static_cast<LONG_PTR>(kNativeFrameMask);
+  style |= static_cast<LONG_PTR>(kFramelessStyle);
+  SetWindowLongPtr(window, GWL_STYLE, style);
+
+  LONG_PTR ex_style = GetWindowLongPtr(window, GWL_EXSTYLE);
+  ex_style &= ~static_cast<LONG_PTR>(kNativeFrameExMask);
+  SetWindowLongPtr(window, GWL_EXSTYLE, ex_style);
+
+  SetWindowPos(window, nullptr, 0, 0, 0, 0,
+               SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
+                   SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
 }
 
 }  // namespace
@@ -142,7 +159,7 @@ bool Win32Window::Create(const std::wstring& title,
   double scale_factor = dpi / 96.0;
 
   HWND window = CreateWindow(
-      window_class, title.c_str(), WS_POPUP | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX,
+      window_class, title.c_str(), kFramelessStyle,
       Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
       Scale(size.width, scale_factor), Scale(size.height, scale_factor),
       nullptr, nullptr, GetModuleHandle(nullptr), this);
@@ -151,6 +168,7 @@ bool Win32Window::Create(const std::wstring& title,
     return false;
   }
 
+  ApplyFramelessStyle(window);
   UpdateTheme(window);
 
   return OnCreate();
@@ -229,9 +247,6 @@ Win32Window::MessageHandler(HWND hwnd,
       }
       if (on_bottom) {
         return HTBOTTOM;
-      }
-      if (point.y < window_rect.top + kDragCaptionHeight && point.x < window_rect.left + kDragCaptionWidth) {
-        return HTCAPTION;
       }
       break;
     }

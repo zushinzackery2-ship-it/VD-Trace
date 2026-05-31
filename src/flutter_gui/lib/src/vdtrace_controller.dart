@@ -13,14 +13,14 @@ import 'trace_settings.dart';
 
 class VdTraceController
 {
-  VdTraceController()
-      : repoRoot = repoRootFromExecutableContext(),
-        loaderBridge = LoaderBridge(),
+  VdTraceController({Directory? repoRootOverride, LoaderBridge? loaderBridge, TraceCli? cli, TraceProfile? profile})
+      : repoRoot = repoRootOverride ?? repoRootFromExecutableContext(),
+        loaderBridge = loaderBridge ?? LoaderBridge(),
         preview = TracePreviewBuffer()
   {
-    profile = loadTraceProfile(repoRoot, defaultAgentPath(repoRoot));
+    this.profile = profile ?? loadTraceProfile(repoRoot, defaultAgentPath(repoRoot));
     ctlPath = defaultCtlPath(repoRoot);
-    cli = TraceCli(ctlPath: ctlPath, workdir: repoRoot);
+    this.cli = cli ?? TraceCli(ctlPath: ctlPath, workdir: repoRoot);
   }
 
   final Directory repoRoot;
@@ -36,27 +36,76 @@ class VdTraceController
   String previewStatus = '尚未开始预览。';
   String outputLog = '';
   String moduleList = '';
+  List<String> moduleNames = [];
+  String? selectedDumpModule;
   String memoryResultText = '';
   bool busy = false;
   bool traceRunning = false;
   bool traceWriting = false;
+  bool _moduleRefreshPending = false;
   Timer? _pollTimer;
 
   List<LoaderSessionSnapshot> get sessions => loaderBridge.snapshotSessions();
   List<LoaderLogEntry> get loaderLogs => loaderBridge.snapshotLogs();
-  bool get hasPid => selectedPid != null && selectedPid! > 0;
-  bool get canLoadAgent => hasPid && !busy && !traceRunning;
-  bool get canRefreshModules => hasPid && !busy;
-  bool get canDumpModule => hasPid && !busy;
-  bool get canStartTrace => hasPid && !busy && !traceRunning && !traceWriting;
-  bool get canStopTrace => hasPid && !busy && (traceRunning || traceWriting);
-  bool get canReadMemory => hasPid && !busy;
-  bool get canWriteMemory => hasPid && !busy;
+  LoaderSessionSnapshot? get selectedSession
+  {
+    final currentSessions = sessions;
+    if (currentSessions.isEmpty)
+    {
+      return null;
+    }
+    final pid = selectedPid;
+    if (pid != null)
+    {
+      for (final session in currentSessions)
+      {
+        if (session.pid == pid)
+        {
+          return session;
+        }
+      }
+    }
+    return currentSessions.first;
+  }
+
+  bool get hasTarget => selectedSession != null;
+  bool get canLoadAgent => hasTarget && !busy && !traceRunning;
+  bool get canRefreshModules => hasTarget && !busy;
+  bool get canDumpModule => hasTarget && !busy;
+  bool get canStartTrace => hasTarget && !busy && !traceRunning && !traceWriting;
+  bool get canStopTrace => hasTarget && !busy && (traceRunning || traceWriting);
+  bool get canReadMemory => hasTarget && !busy;
+  bool get canWriteMemory => hasTarget && !busy;
+
+  String get autoTargetTitle
+  {
+    final session = selectedSession;
+    if (session == null)
+    {
+      return '自动发现目标';
+    }
+    return '自动目标：${session.displayName}';
+  }
+
+  String get autoTargetSubtitle
+  {
+    final count = sessions.length;
+    if (count == 0)
+    {
+      return '等待 Loader IPC 目标自动连接。';
+    }
+    if (count == 1)
+    {
+      return '已自动发现 1 个 IPC 目标，无需填写 PID。';
+    }
+    final session = selectedSession;
+    return '已自动发现 $count 个 IPC 目标，当前自动选中 PID ${session?.pid ?? '-'}。';
+  }
 
   void start()
   {
     loaderBridge.start();
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 750), (_) => unawaited(refreshStatus()));
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 750), (_) => unawaited(refreshRuntime()));
   }
 
   void dispose()
@@ -68,11 +117,56 @@ class VdTraceController
 
   void selectSession(LoaderSessionSnapshot session)
   {
+    final previousPid = selectedPid ?? 0;
     selectedPid = session.pid;
-    if (isAutoOutputPath(profile.outputPath, session.pid))
+    statusText = session.capabilityText;
+    if (session.pid != previousPid)
     {
-      profile.outputPath = '';
+      moduleList = '';
+      moduleNames = [];
+      selectedDumpModule = null;
+      if (isAutoOutputPath(profile.outputPath, previousPid))
+      {
+        profile.outputPath = '';
+      }
     }
+  }
+
+  bool syncSessions()
+  {
+    final currentSessions = sessions;
+    if (currentSessions.isEmpty)
+    {
+      if (selectedPid != null)
+      {
+        selectedPid = null;
+        moduleList = '';
+        moduleNames = [];
+        selectedDumpModule = null;
+        traceRunning = false;
+        traceWriting = false;
+      }
+      statusText = '等待 Loader IPC 会话。';
+      return false;
+    }
+
+    final current = selectedPid == null
+        ? null
+        : currentSessions.where((session) => session.pid == selectedPid).firstOrNull;
+    if (current == null)
+    {
+      selectSession(currentSessions.first);
+      _append('自动选中 Loader 会话：${currentSessions.first.displayName}');
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> refreshRuntime() async
+  {
+    syncSessions();
+    await refreshStatus();
+    unawaited(refreshModulesIfAgentOnline());
   }
 
   String depthSummary()
@@ -98,11 +192,12 @@ class VdTraceController
 
   Future<void> refreshStatus() async
   {
-    final pid = selectedPid;
-    if (pid == null || pid <= 0)
+    final session = selectedSession;
+    if (session == null || session.pid <= 0)
     {
       return;
     }
+    final pid = session.pid;
     final result = await cli.status(pid);
     if (result.success)
     {
@@ -123,58 +218,61 @@ class VdTraceController
 
   Future<void> loadAgent() async
   {
-    final pid = _requirePid();
+    final session = _requireSession();
     await _runAction(() async
     {
-      final online = await cli.ping(pid);
-      if (online.success)
+      if (!await _ensureAgentOnline(session))
       {
-        _append('Agent 已在线：${online.message}');
         return;
       }
-      final session = sessions.where((item) => item.pid == pid).firstOrNull;
-      if (session == null)
-      {
-        _append('没有找到 PID $pid 的 Loader 会话，未执行直接注入 fallback。');
-        return;
-      }
-      final loaded = await loaderBridge.loadAgent(session, profile.agentPath);
-      if (!loaded)
-      {
-        _append('Loader 加载请求未完成：Flutter bridge 当前只接受会话和日志，未启用直接注入。');
-        return;
-      }
-      final ready = await cli.waitUntilOnline(pid, 5000);
-      _append(ready ? 'Agent IPC 已上线。' : '等待 Agent IPC 上线超时。');
+      await _refreshModulesForSession(session, requireAgentOnline: false);
     });
   }
 
   Future<void> refreshModules() async
   {
-    final pid = _requirePid();
+    final session = _requireSession();
     await _runAction(() async
     {
-      final result = await cli.modules(pid);
-      moduleList = result.message;
-      _append(result.success ? '模块列表已刷新。' : result.message);
+      if (!await _ensureAgentOnline(session))
+      {
+        return;
+      }
+      await _refreshModulesForSession(session, requireAgentOnline: false);
     });
   }
 
   Future<void> dumpModule(String moduleName) async
   {
-    final pid = _requirePid();
+    final session = _requireSession();
     await _runAction(() async
     {
-      final result = await cli.dumpModule(pid, moduleName.trim().isEmpty ? profile.modules.trim() : moduleName.trim());
+      if (!await _ensureAgentOnline(session))
+      {
+        return;
+      }
+      await _refreshModulesForSession(session, requireAgentOnline: false);
+      final module = _selectDumpModule(moduleName);
+      if (module.isEmpty)
+      {
+        _append('Dump+Fix 失败：Agent 在线但没有返回可用模块。');
+        return;
+      }
+      final result = await cli.dumpModule(session.pid, module);
       _append(result.message);
     });
   }
 
   Future<void> startTrace() async
   {
-    final pid = _requirePid();
+    final session = _requireSession();
     await _runAction(() async
     {
+      if (!await _ensureAgentOnline(session))
+      {
+        return;
+      }
+      final pid = session.pid;
       if (isAutoOutputPath(profile.outputPath, pid))
       {
         profile.outputPath = defaultOutputPath(pid);
@@ -196,10 +294,10 @@ class VdTraceController
 
   Future<void> stopTrace() async
   {
-    final pid = _requirePid();
+    final session = _requireSession();
     await _runAction(() async
     {
-      final result = await cli.stop(pid);
+      final result = await cli.stop(session.pid);
       _append(result.message);
       await refreshStatus();
     });
@@ -207,11 +305,15 @@ class VdTraceController
 
   Future<void> readMemory(String address, String sizeText) async
   {
-    final pid = _requirePid();
+    final session = _requireSession();
     await _runAction(() async
     {
+      if (!await _ensureAgentOnline(session))
+      {
+        return;
+      }
       final size = parseMemorySize(sizeText);
-      final result = await cli.readMemory(pid, address.trim(), size);
+      final result = await cli.readMemory(session.pid, address.trim(), size);
       memoryResultText = result.message;
       _append(result.message);
     });
@@ -219,24 +321,145 @@ class VdTraceController
 
   Future<void> writeMemory(String address, String mode, String value) async
   {
-    final pid = _requirePid();
+    final session = _requireSession();
     await _runAction(() async
     {
+      if (!await _ensureAgentOnline(session))
+      {
+        return;
+      }
       final data = encodeMemoryWriteBytes(mode, value);
-      final result = await cli.writeMemory(pid, address.trim(), data);
+      final result = await cli.writeMemory(session.pid, address.trim(), data);
       memoryResultText = result.message;
       _append(result.message);
     });
   }
 
-  int _requirePid()
+  LoaderSessionSnapshot _requireSession()
   {
-    final pid = selectedPid;
-    if (pid == null || pid <= 0)
+    syncSessions();
+    final session = selectedSession;
+    if (session == null || session.pid <= 0)
     {
-      throw StateError('请先选择 Loader 会话或填写 PID。');
+      throw StateError('没有发现 Loader IPC 会话。');
     }
-    return pid;
+    selectedPid = session.pid;
+    return session;
+  }
+
+  Future<bool> _ensureAgentOnline(LoaderSessionSnapshot session) async
+  {
+    final online = await cli.ping(session.pid);
+    if (online.success)
+    {
+      _append('Agent 已在线：${online.message}');
+      return true;
+    }
+    final loaded = await loaderBridge.loadAgent(session, profile.agentPath);
+    if (!loaded)
+    {
+      _append('发送 Loader 加载请求失败：${session.displayName}');
+      return false;
+    }
+    final ready = await cli.waitUntilOnline(session.pid, 5000);
+    _append(ready ? 'Agent IPC 已上线：${session.displayName}' : '等待 Agent IPC 上线超时：${session.displayName}');
+    return ready;
+  }
+
+  Future<void> refreshModulesIfAgentOnline() async
+  {
+    if (busy || _moduleRefreshPending || moduleNames.isNotEmpty)
+    {
+      return;
+    }
+    final session = selectedSession;
+    if (session == null)
+    {
+      return;
+    }
+    _moduleRefreshPending = true;
+    try
+    {
+      final online = await cli.ping(session.pid);
+      if (!online.success)
+      {
+        return;
+      }
+      await _refreshModulesForSession(session, requireAgentOnline: false, silent: true);
+    }
+    finally
+    {
+      _moduleRefreshPending = false;
+    }
+  }
+
+  Future<bool> _refreshModulesForSession(
+    LoaderSessionSnapshot session, {
+    required bool requireAgentOnline,
+    bool silent = false,
+  }) async
+  {
+    if (requireAgentOnline && !await _ensureAgentOnline(session))
+    {
+      return false;
+    }
+    final result = await cli.modules(session.pid);
+    moduleList = result.message;
+    if (!result.success)
+    {
+      if (!silent)
+      {
+        _append(result.message);
+      }
+      return false;
+    }
+
+    moduleNames = result.message
+        .split(RegExp(r'\r?\n'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .fold<List<String>>(<String>[], (modules, module)
+        {
+          if (!modules.any((existing) => existing.toLowerCase() == module.toLowerCase()))
+          {
+            modules.add(module);
+          }
+          return modules;
+        })
+        .toList();
+    if (moduleNames.isEmpty)
+    {
+      selectedDumpModule = null;
+      if (!silent)
+      {
+        _append('模块列表为空：Agent 没有返回可 Dump 的真实模块。');
+      }
+      return false;
+    }
+    if (moduleNames.isNotEmpty && !moduleNames.contains(selectedDumpModule))
+    {
+      selectedDumpModule = moduleNames.first;
+    }
+    if (!silent)
+    {
+      _append('模块列表已刷新：${moduleNames.length} 个模块。');
+    }
+    return true;
+  }
+
+  String _selectDumpModule(String requested)
+  {
+    final trimmed = requested.trim();
+    if (trimmed.isNotEmpty && moduleNames.any((module) => module.toLowerCase() == trimmed.toLowerCase()))
+    {
+      return trimmed;
+    }
+    final selected = selectedDumpModule?.trim() ?? '';
+    if (selected.isNotEmpty && moduleNames.any((module) => module.toLowerCase() == selected.toLowerCase()))
+    {
+      return selected;
+    }
+    return moduleNames.isEmpty ? '' : moduleNames.first;
   }
 
   Future<void> _runAction(Future<void> Function() action) async

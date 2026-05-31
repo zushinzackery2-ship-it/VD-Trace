@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'models.dart';
 import 'ui_theme.dart';
 import 'ui_widgets.dart';
 import 'vdtrace_controller.dart';
@@ -40,7 +39,6 @@ class _VdTraceHomePageState extends State<VdTraceHomePage>
 {
   late final VdTraceController controller;
   late final Timer uiTimer;
-  final pidController = TextEditingController();
   final moduleController = TextEditingController();
   final memoryAddressController = TextEditingController();
   final memorySizeController = TextEditingController(text: '64');
@@ -57,7 +55,16 @@ class _VdTraceHomePageState extends State<VdTraceHomePage>
       controller.start();
     }
     moduleController.text = controller.profile.modules;
-    uiTimer = Timer.periodic(const Duration(milliseconds: 500), (_) => setState(() {}));
+    uiTimer = Timer.periodic(const Duration(milliseconds: 500), (_)
+    {
+      controller.syncSessions();
+      final selectedModule = controller.selectedDumpModule;
+      if (selectedModule != null && moduleController.text != selectedModule)
+      {
+        moduleController.text = selectedModule;
+      }
+      setState(() {});
+    });
   }
 
   @override
@@ -68,7 +75,6 @@ class _VdTraceHomePageState extends State<VdTraceHomePage>
     {
       controller.dispose();
     }
-    pidController.dispose();
     moduleController.dispose();
     memoryAddressController.dispose();
     memorySizeController.dispose();
@@ -87,7 +93,7 @@ class _VdTraceHomePageState extends State<VdTraceHomePage>
         child: SafeArea(
           child: Column(
             children: [
-              _TopCommandBar(controller: controller, pidController: pidController, onSessionSelect: _selectSession, onRun: _run),
+              _TopCommandBar(controller: controller, moduleController: moduleController, onModuleChanged: _selectDumpModule, onRun: _run),
               Expanded(child: _mainTabs()),
             ],
           ),
@@ -111,14 +117,14 @@ class _VdTraceHomePageState extends State<VdTraceHomePage>
                 PagePad(children: [SectionCard(title: 'Core Trace Setup', subtitle: '启动前最常改的参数集中在这里。', child: Column(children: [FieldGrid(
             children: [
               TextFieldRow(label: 'Agent DLL', value: profile.agentPath, onChanged: (value) => profile.agentPath = value),
-              TextFieldRow(label: '模块', value: profile.modules, onChanged: (value) => profile.modules = value, controller: moduleController),
+              TextFieldRow(label: '追踪模块', value: profile.modules, onChanged: (value) => profile.modules = value),
               TextFieldRow(label: '输出路径', value: profile.outputPath, onChanged: (value) => profile.outputPath = value),
               TextFieldRow(label: '触发点', value: profile.triggerPoint, onChanged: (value) => profile.triggerPoint = value),
               TextFieldRow(label: '线程 ID', value: profile.threadId, onChanged: (value) => profile.threadId = value),
               TextFieldRow(label: '事件上限', value: profile.maxEvents, onChanged: (value) => profile.maxEvents = value),
               DropdownRow(label: '后端', value: profile.backend, values: const ['DR', 'TF', 'PT'], onChanged: (value) => setState(() => profile.backend = value)),
             ],
-          ), Align(alignment: Alignment.centerLeft, child: ActionButton(label: '加载 Agent', icon: Icons.login, onPressed: controller.canLoadAgent ? () => _run(controller.loadAgent) : null))]))]),
+          ), Align(alignment: Alignment.centerLeft, child: Wrap(spacing: 12, runSpacing: 8, children: [ActionButton(label: '一键加载 Agent', icon: Icons.login, onPressed: controller.canLoadAgent ? () => _run(controller.loadAgent) : null), ActionButton(label: '刷新模块', icon: Icons.refresh, onPressed: controller.canRefreshModules ? () => _run(controller.refreshModules) : null)]))]))]),
                 PagePad(children: [SectionCard(title: 'Run Policy', subtitle: '运行行为开关，直接影响 configure 参数。', child: FieldGrid(
             children: [
               SwitchRow(label: '自动线程捕获', value: profile.threadCapture, onChanged: (value) => setState(() => profile.threadCapture = value)),
@@ -173,7 +179,7 @@ class _VdTraceHomePageState extends State<VdTraceHomePage>
           ))]),
                 PagePad(children: [SectionCard(title: 'Trace Control', subtitle: controller.statusText, child: Wrap(spacing: 12, runSpacing: 8, children: [ActionButton(label: '开始追踪', icon: Icons.play_arrow, onPressed: controller.canStartTrace ? () => _run(controller.startTrace) : null), ActionButton(label: '停止追踪', icon: Icons.stop, onPressed: controller.canStopTrace ? () => _run(controller.stopTrace) : null)])), TextPanel(title: controller.previewStatus, text: controller.previewText, minHeight: 430)]),
                 PagePad(children: [SectionCard(title: 'Log Control', subtitle: '看到异常输出时可就地停止追踪。', child: Align(alignment: Alignment.centerLeft, child: ActionButton(label: '停止追踪', icon: Icons.stop, onPressed: controller.canStopTrace ? () => _run(controller.stopTrace) : null))), TextPanel(title: '动作日志', text: controller.outputLog, minHeight: 420), TextPanel(title: 'Loader 日志', text: loaderLog, minHeight: 220)]),
-                PagePad(children: [SectionCard(title: 'Module Tools', subtitle: '模块相关动作集中在这里。', child: Column(children: [TextFieldRow(label: 'Dump 模块名', value: profile.modules, controller: moduleController, onChanged: (value) => profile.modules = value), Align(alignment: Alignment.centerLeft, child: Wrap(spacing: 12, runSpacing: 8, children: [ActionButton(label: '刷新模块', icon: Icons.refresh, onPressed: controller.canRefreshModules ? () => _run(controller.refreshModules) : null), ActionButton(label: 'Dump+Fix', icon: Icons.inventory_2, onPressed: controller.canDumpModule ? () => _run(() => controller.dumpModule(moduleController.text)) : null)]))])), TextPanel(title: '模块列表', text: controller.moduleList, minHeight: 420)]),
+                PagePad(children: [SectionCard(title: 'Module Tools', subtitle: controller.moduleNames.isEmpty ? '等待 Agent 上线后自动刷新真实模块列表。' : '已发现 ${controller.moduleNames.length} 个真实模块。', child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [ModulePicker(key: const ValueKey('page_module_picker'), controller: controller, controllerText: moduleController, onChanged: _selectDumpModule), const SizedBox(height: 10), Align(alignment: Alignment.centerLeft, child: Wrap(spacing: 12, runSpacing: 8, children: [ActionButton(label: '刷新模块', icon: Icons.refresh, onPressed: controller.canRefreshModules ? () => _run(controller.refreshModules) : null), ActionButton(label: 'Dump+Fix', icon: Icons.inventory_2, onPressed: controller.canDumpModule ? () => _run(() => controller.dumpModule(controller.selectedDumpModule ?? '')) : null)]))])), TextPanel(title: '模块列表', text: controller.moduleList, minHeight: 420)]),
               ],
             ),
           ),
@@ -182,29 +188,29 @@ class _VdTraceHomePageState extends State<VdTraceHomePage>
     );
   }
 
-  void _selectSession(LoaderSessionSnapshot session)
-  {
-    setState(()
-    {
-      controller.selectSession(session);
-      pidController.text = '${session.pid}';
-    });
-  }
-
   Future<void> _run(Future<void> Function() action) async
   {
     await action();
     setState(() {});
   }
+
+  void _selectDumpModule(String value)
+  {
+    setState(()
+    {
+      controller.selectedDumpModule = value;
+      moduleController.text = value;
+    });
+  }
 }
 
 class _TopCommandBar extends StatelessWidget
 {
-  const _TopCommandBar({required this.controller, required this.pidController, required this.onSessionSelect, required this.onRun});
+  const _TopCommandBar({required this.controller, required this.moduleController, required this.onModuleChanged, required this.onRun});
 
   final VdTraceController controller;
-  final TextEditingController pidController;
-  final void Function(LoaderSessionSnapshot session) onSessionSelect;
+  final TextEditingController moduleController;
+  final void Function(String value) onModuleChanged;
   final Future<void> Function(Future<void> Function() action) onRun;
 
   @override
@@ -218,7 +224,7 @@ class _TopCommandBar extends StatelessWidget
         children: [
           Row(
             children: [
-              const Text('VD-Trace', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.6)),
+              const _BrandTitle(),
               const SizedBox(width: 16),
               Expanded(
                 child: GestureDetector(
@@ -234,9 +240,7 @@ class _TopCommandBar extends StatelessWidget
           const SizedBox(height: 10),
           Row(
             children: [
-              const SizedBox(width: 24),
-              Expanded(child: _CommandWrap(controller: controller, pidController: pidController, onSessionSelect: onSessionSelect, onRun: onRun)),
-              const SizedBox(width: 24),
+              Expanded(child: _CommandWrap(controller: controller, moduleController: moduleController, onModuleChanged: onModuleChanged, onRun: onRun)),
             ],
           ),
           const SizedBox(height: 8),
@@ -259,13 +263,51 @@ class _TopCommandBar extends StatelessWidget
   }
 }
 
+class _BrandTitle extends StatelessWidget
+{
+  const _BrandTitle();
+
+  @override
+  Widget build(BuildContext context)
+  {
+    return Container(
+      key: const ValueKey('vdtrace_brand_title'),
+      height: 38,
+      padding: const EdgeInsets.fromLTRB(4, 3, 12, 3),
+      decoration: BoxDecoration(
+        color: vdPanelSoft,
+        border: Border.all(color: vdLine),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: vdBlue,
+              shape: BoxShape.circle,
+              border: Border.all(color: vdCyan.withValues(alpha: 0.55)),
+              boxShadow: [BoxShadow(color: vdBlue.withValues(alpha: 0.18), blurRadius: 10, offset: const Offset(0, 2))],
+            ),
+            child: const Icon(Icons.radar, size: 18, color: Colors.white),
+          ),
+          const SizedBox(width: 9),
+          const Text('VD-Trace', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, letterSpacing: 0)),
+        ],
+      ),
+    );
+  }
+}
+
 class _CommandWrap extends StatelessWidget
 {
-  const _CommandWrap({required this.controller, required this.pidController, required this.onSessionSelect, required this.onRun});
+  const _CommandWrap({required this.controller, required this.moduleController, required this.onModuleChanged, required this.onRun});
 
   final VdTraceController controller;
-  final TextEditingController pidController;
-  final void Function(LoaderSessionSnapshot session) onSessionSelect;
+  final TextEditingController moduleController;
+  final void Function(String value) onModuleChanged;
   final Future<void> Function(Future<void> Function() action) onRun;
 
   @override
@@ -276,19 +318,97 @@ class _CommandWrap extends StatelessWidget
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
+        SizedBox(width: 430, child: _AutoTargetPanel(controller: controller)),
         SizedBox(
-          width: 130,
-          child: TextField(
-            controller: pidController,
-            decoration: const InputDecoration(labelText: '手动 PID', prefixIcon: Icon(Icons.tag)),
-            onSubmitted: (value)
-            {
-              controller.selectedPid = int.tryParse(value);
-            },
+          width: 260,
+          child: ModulePicker(
+            key: const ValueKey('top_module_picker'),
+            controller: controller,
+            controllerText: moduleController,
+            onChanged: onModuleChanged,
           ),
         ),
-        SizedBox(width: 260, child: _SessionPicker(controller: controller, onSelect: onSessionSelect)),
+        ActionButton(label: '一键加载 Agent', icon: Icons.login, onPressed: controller.canLoadAgent ? () => onRun(controller.loadAgent) : null),
+        ActionButton(label: '刷新模块', icon: Icons.refresh, onPressed: controller.canRefreshModules ? () => onRun(controller.refreshModules) : null),
+        ActionButton(label: 'Dump+Fix', icon: Icons.inventory_2, onPressed: controller.canDumpModule ? () => onRun(() => controller.dumpModule(controller.selectedDumpModule ?? '')) : null),
       ],
+    );
+  }
+}
+
+class _AutoTargetPanel extends StatelessWidget
+{
+  const _AutoTargetPanel({required this.controller});
+
+  final VdTraceController controller;
+
+  @override
+  Widget build(BuildContext context)
+  {
+    final session = controller.selectedSession;
+    return Container(
+      height: 58,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(color: vdPanelSoft, borderRadius: BorderRadius.circular(8), border: Border.all(color: vdLine)),
+      child: Row(
+        children: [
+          Icon(session == null ? Icons.radar : Icons.memory, size: 20, color: session == null ? vdTextMuted : vdCyan),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(controller.autoTargetTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, color: vdTextStrong, fontSize: 13)),
+                const SizedBox(height: 2),
+                Text(controller.autoTargetSubtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: vdTextMuted, fontSize: 11)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ModulePicker extends StatelessWidget
+{
+  const ModulePicker({super.key, required this.controller, required this.controllerText, required this.onChanged});
+
+  final VdTraceController controller;
+  final TextEditingController controllerText;
+  final void Function(String value) onChanged;
+
+  @override
+  Widget build(BuildContext context)
+  {
+    final modules = controller.moduleNames;
+    if (modules.isEmpty)
+    {
+      return InputDecorator(
+        decoration: const InputDecoration(labelText: 'Dump 模块', prefixIcon: Icon(Icons.inventory_2)),
+        child: Text(
+          controller.hasTarget ? '真实模块列表将自动刷新' : '等待自动发现目标',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: vdTextMuted),
+        ),
+      );
+    }
+    final selected = modules.contains(controller.selectedDumpModule) ? controller.selectedDumpModule! : modules.first;
+    return DropdownButtonFormField<String>(
+      initialValue: selected,
+      decoration: const InputDecoration(labelText: 'Dump 模块', prefixIcon: Icon(Icons.inventory_2)),
+      items: [for (final module in modules) DropdownMenuItem(value: module, child: Text(module, overflow: TextOverflow.ellipsis))],
+      onChanged: (value)
+      {
+        if (value == null)
+        {
+          return;
+        }
+        controllerText.text = value;
+        onChanged(value);
+      },
     );
   }
 }
@@ -370,53 +490,5 @@ class _ConfigTabs extends StatelessWidget
         ),
       ),
     );
-  }
-}
-
-class _SessionPicker extends StatelessWidget
-{
-  const _SessionPicker({required this.controller, required this.onSelect});
-
-  final VdTraceController controller;
-  final void Function(LoaderSessionSnapshot session) onSelect;
-
-  @override
-  Widget build(BuildContext context)
-  {
-    final sessions = controller.sessions;
-    if (sessions.isEmpty)
-    {
-      return const InputDecorator(
-        decoration: InputDecoration(labelText: 'Loader 会话', prefixIcon: Icon(Icons.memory)),
-        child: Text('等待 Loader hello...', style: TextStyle(color: vdTextMuted)),
-      );
-    }
-    final selected = sessions.where((session) => session.pid == controller.selectedPid).firstOrNull ?? sessions.first;
-    return DropdownButtonFormField<int>(
-      initialValue: selected.pid,
-      decoration: const InputDecoration(labelText: 'Loader 会话', prefixIcon: Icon(Icons.memory)),
-      items: [for (final session in sessions) DropdownMenuItem(value: session.pid, child: Text(session.displayName, overflow: TextOverflow.ellipsis))],
-      onChanged: (pid)
-      {
-        if (pid == null)
-        {
-          return;
-        }
-        onSelect(sessions.firstWhere((session) => session.pid == pid));
-      },
-    );
-  }
-}
-
-extension _FirstOrNull<T> on Iterable<T>
-{
-  T? get firstOrNull
-  {
-    final iterator = this.iterator;
-    if (iterator.moveNext())
-    {
-      return iterator.current;
-    }
-    return null;
   }
 }
