@@ -6,6 +6,7 @@
 
 ## 2. 已解决问题 / 已完成需求
 
+- 已清理单游戏专项入口与 WinHTTP 历史命名：Loader IPC 统一为 `VDTraceLoaderControl`，移除专项 proxy 构建/源码/BepInEx 进程绑定/恢复逻辑，默认 trace/profile 不再写死固定目标 RVA。
 - 已将 2026-05-09 提交 `7f02012` 导出到 `ref_pic/vdtrace_2026-05-09_7f02012/` 作为老版本参考。
 - 已确认 2026-05-09 老版本与当前版本核心 Win32 API 使用面基本一致：ToolHelp32、OpenThread、Get/SetThreadContext、VEH、VirtualQuery/Protect、注入链均沿用同类机制；当前主要是目录重构和控制端迁移。
 - 已按老版本 Python/Tk GUI 的稳定 Loader pipe 交互修当前 Flutter GUI：恢复长连接会话句柄、按 C++ header.size 协议读整包、修正 AgentHello 字段偏移、支持发送 LoadDllRequest、记录 LoadDllReply。
@@ -14,7 +15,7 @@
 - 已修 Flutter 顶部“自动发现目标进程”命令行左侧对齐：移除额外 24px 左右缩进，使其与标题和状态组件使用同一外层 padding 起点。
 - 已修 Flutter 顶部 `VD-Trace` 标题视觉：改为带外圈 radar 图案的品牌块，并新增几何测试保证品牌块与自动目标行左侧对齐。
 - 已继续修 Flutter GUI 对齐老 Python GUI 主路径：顶部删除 Loader 会话下拉/手动目标选择入口，改成自动发现状态展示；模块页未拿到真实模块前不再给手填 Dump 模块假入口；Dump+Fix 按钮只依赖自动目标，点击后自动确保 Agent 在线、刷新模块、选择真实模块并执行 dump。
-- 已新增控制器级工作流测试：模拟两个 Loader IPC 目标时自动选中 PID 更小的真实目标；Dump+Fix 在 Agent 离线时自动发送 LoadDllRequest、等待上线、刷新模块去重，并对真实模块 `GameAssembly.dll` 执行 dump。
+- 已新增控制器级工作流测试：模拟两个 Loader IPC 目标时自动选中 PID 更小的真实目标；Dump+Fix 在 Agent 离线时自动发送 LoadDllRequest、等待上线、刷新模块去重，并对通用测试模块执行 dump。
 - 已新增 Flutter Loader IPC 模拟测试：假的 Loader 客户端连接命名管道、发送 AgentHello、接收 LoadDllRequest、回发 LoadDllReply，验证自动会话发现和一键加载协议闭环。
 - 已新增并跑通真实 Agent E2E：Flutter LoaderBridge 接真实 Windows 进程内 Loader 客户端，LoadDllRequest 后实际 `LoadLibraryW(VDTraceAgent.dll)` 并调用 `vdtrace_loader_bootstrap`，随后通过 `vdtrace_ctl` 对真实 PID 完成 `modules` 与 `dump VDTraceAgent.dll`，生成 raw/fix dump 文件。
 - 已新增并跑通 Flutter 控制器真实 E2E：`VdTraceController` 自动选中真实 Loader IPC 目标，一键加载 Agent 后刷新真实模块列表，并通过控制器 `dumpModule` 完成真实 Dump+Fix。

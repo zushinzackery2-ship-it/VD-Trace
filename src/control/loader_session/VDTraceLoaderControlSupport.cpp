@@ -64,7 +64,7 @@ namespace vdtrace::tools
             attributes.bInheritHandle = FALSE;
 
             return CreateNamedPipeW(
-                WINHTTP_REDIRECT_PROXY_PIPE_NAME,
+                VDTRACE_LOADER_CONTROL_PIPE_NAME,
                 PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
                 PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
                 PIPE_UNLIMITED_INSTANCES,
@@ -156,7 +156,7 @@ namespace vdtrace::tools
                     }
 
                     const auto *payload = reinterpret_cast<const loader_ipc::AgentHelloPayload *>(buffer.data() + sizeof(loader_ipc::MessageHeader));
-                    const std::wstring reported_process_path = NormalizePathText(DecodeUtf16Text(payload->processPath, WINHTTP_REDIRECT_PROXY_MAX_PATH_CHARS));
+                    const std::wstring reported_process_path = NormalizePathText(DecodeUtf16Text(payload->processPath, VDTRACE_LOADER_CONTROL_MAX_PATH_CHARS));
 
                     const bool pid_matched = expected_pid == 0 || header->pid == expected_pid;
                     const bool path_matched = expected_process_path == nullptr || EqualsInsensitive(reported_process_path, normalized_expected_path);
@@ -247,7 +247,7 @@ namespace vdtrace::tools
             }
 
             const auto *payload = reinterpret_cast<const loader_ipc::LoadDllReplyPayload *>(buffer.data() + sizeof(loader_ipc::MessageHeader));
-            reply_text = DecodeUtf16Text(payload->text, WINHTTP_REDIRECT_PROXY_MAX_TEXT_CHARS);
+            reply_text = DecodeUtf16Text(payload->text, VDTRACE_LOADER_CONTROL_MAX_TEXT_CHARS);
             if (payload->status == 0)
             {
                 return true;

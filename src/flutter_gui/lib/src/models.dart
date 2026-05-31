@@ -1,6 +1,6 @@
 import 'dart:io';
 
-const String loaderPipeName = r'\\.\pipe\WinHttpRedirectProxyControl';
+const String loaderPipeName = r'\\.\pipe\VDTraceLoaderControl';
 const int loaderMagic = 0x58525057;
 const int loaderMsgAgentHello = 1;
 const int loaderMsgAgentLog = 2;
@@ -162,7 +162,7 @@ class TraceProfile
     required this.agentPath,
     this.threadId = '0',
     this.threadCapture = true,
-    this.modules = 'UnityPlayer.dll',
+    this.modules = '',
     this.outputPath = '',
     this.maxEvents = '0',
     this.backend = 'DR',
@@ -174,10 +174,10 @@ class TraceProfile
     this.anonymousExecCallDepth = '3',
     this.anonymousExecExecutionMode = 'EDGE',
     this.moduleCallDepths = '',
-    this.triggerPoint = 'GameAssembly.dll+0x3498AE0',
+    this.triggerPoint = '',
     this.probeSpec = '',
     this.probeEnabled = false,
-    this.triggerEnabled = true,
+    this.triggerEnabled = false,
     this.blockMainThread = false,
     this.traceOutsideModules = false,
     this.allEvents = false,

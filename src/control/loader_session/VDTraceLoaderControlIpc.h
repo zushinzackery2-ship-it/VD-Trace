@@ -1,16 +1,16 @@
 #ifndef VDTRACE_LOADER_CONTROL_IPC_H
 #define VDTRACE_LOADER_CONTROL_IPC_H
 
-#ifndef WINHTTP_REDIRECT_PROXY_PIPE_NAME
-#define WINHTTP_REDIRECT_PROXY_PIPE_NAME L"\\\\.\\pipe\\WinHttpRedirectProxyControl"
+#ifndef VDTRACE_LOADER_CONTROL_PIPE_NAME
+#define VDTRACE_LOADER_CONTROL_PIPE_NAME L"\\\\.\\pipe\\VDTraceLoaderControl"
 #endif
 
-#ifndef WINHTTP_REDIRECT_PROXY_MAX_PATH_CHARS
-#define WINHTTP_REDIRECT_PROXY_MAX_PATH_CHARS 1024
+#ifndef VDTRACE_LOADER_CONTROL_MAX_PATH_CHARS
+#define VDTRACE_LOADER_CONTROL_MAX_PATH_CHARS 1024
 #endif
 
-#ifndef WINHTTP_REDIRECT_PROXY_MAX_TEXT_CHARS
-#define WINHTTP_REDIRECT_PROXY_MAX_TEXT_CHARS 256
+#ifndef VDTRACE_LOADER_CONTROL_MAX_TEXT_CHARS
+#define VDTRACE_LOADER_CONTROL_MAX_TEXT_CHARS 256
 #endif
 
 #include <Windows.h>
@@ -47,22 +47,22 @@ namespace vdtrace::tools::loader_ipc
 
     struct AgentHelloPayload
     {
-        wchar_t processPath[WINHTTP_REDIRECT_PROXY_MAX_PATH_CHARS];
+        wchar_t processPath[VDTRACE_LOADER_CONTROL_MAX_PATH_CHARS];
         std::uint32_t protocolVersion;
         std::uint32_t featureFlags;
     };
 
     struct LoadDllRequestPayload
     {
-        wchar_t dllPath[WINHTTP_REDIRECT_PROXY_MAX_PATH_CHARS];
+        wchar_t dllPath[VDTRACE_LOADER_CONTROL_MAX_PATH_CHARS];
     };
 
     struct LoadDllReplyPayload
     {
         std::uint32_t status;
         std::uint32_t win32Error;
-        wchar_t dllPath[WINHTTP_REDIRECT_PROXY_MAX_PATH_CHARS];
-        wchar_t text[WINHTTP_REDIRECT_PROXY_MAX_TEXT_CHARS];
+        wchar_t dllPath[VDTRACE_LOADER_CONTROL_MAX_PATH_CHARS];
+        wchar_t text[VDTRACE_LOADER_CONTROL_MAX_TEXT_CHARS];
     };
 
     inline bool WriteAll(HANDLE pipe, const void *buffer, DWORD size)

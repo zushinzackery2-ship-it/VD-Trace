@@ -43,7 +43,6 @@
 | **HeapPeek 堆观测** | 运行时堆内存变化监控，支持 inline suffix 输出和堆操作追踪 |
 | **Extender 扩展分析** | 可插拔的事件处理扩展框架，支持自定义分析逻辑和输出格式 |
 | **BepInEx 自动启动** | BepInEx 插件形式自动加载 VDTrace，支持 IL2CPP 游戏引擎 |
-| **早期加载器** | `VDTraceEndfieldBaseProxy.cpp` 实现游戏启动早期阶段的追踪初始化 |
 
 ---
 
@@ -174,7 +173,6 @@ depthfilter=outside=2:edge,anon=all:tf,module=GameAssembly.dll:all:tf
 | `src/tools/vdtrace_autostart/` | 自动启动器 CLI：插件部署、游戏启动、等待 trace 完成 |
 | `src/tools/examples/` | 控制端示例程序 |
 | `src/plugins/bepinex/` | BepInEx 插件：IL2CPP 游戏引擎自动加载 VDTrace，支持激活文件配置 |
-| `src/loaders/early_loader/` | 早期加载器：游戏启动早期阶段追踪初始化，支持 Endfield 基础代理 |
 | `src/flutter_gui/` | Flutter Windows GUI 当前图形控制端，复用 `vdtrace_ctl.exe` 控制 Agent |
 | `src/tests/` | Smoke 回归测试套件 |
 | `include/VDTrace/` | 公共 API 头文件 (`VDTrace.h`, `VDTraceC.h`, `VDTraceIpc.h`) |
@@ -207,7 +205,6 @@ cmd.exe /c "call build_release.bat"
 | `VDTrace.dll` | DLL | 核心引擎动态库版本（导出 C API） |
 | `VDTraceAgent.dll` | DLL | 注入目标进程的追踪代理 |
 | `VDTraceAutoStart.dll` | DLL | 自动启动 Helper |
-| `VDTraceEndfieldBaseProxy.dll` | DLL | 早期加载器，游戏启动早期阶段追踪初始化 |
 | `VDTraceTriggerWaitHelper.dll` | DLL | trigger/root-stop smoke helper |
 | `VDTraceDecryptSmokeHelper.dll` | DLL | decrypt smoke helper |
 | `vdtrace_ctl.exe` | EXE | IPC 命令行客户端 |
@@ -240,10 +237,6 @@ dotnet build src\plugins\bepinex\VDTraceAutoStartPlugin.csproj -c Release
 ```
 
 插件产物输出到 `bin\release\bepinex_plugin\`，部署时复制 `VDTraceAutoStartPlugin.dll` 到 BepInEx 插件目录。
-
-### 早期加载器
-
-包含在核心引擎构建中，产物为 `VDTraceEndfieldBaseProxy.dll`。
 
 ---
 

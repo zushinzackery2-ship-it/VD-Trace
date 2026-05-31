@@ -12,7 +12,7 @@ void main()
   {
     final loader = _FakeLoaderBridge([
       const LoaderSessionSnapshot(sessionId: 1, pid: 300, processPath: r'C:\Game\PlatformProcess.exe', protocolVersion: 1, featureFlags: 1, connected: true, helloReceived: true),
-      const LoaderSessionSnapshot(sessionId: 2, pid: 200, processPath: r'C:\Game\Endfield.exe', protocolVersion: 1, featureFlags: 1, connected: true, helloReceived: true),
+      const LoaderSessionSnapshot(sessionId: 2, pid: 200, processPath: r'C:\Targets\TargetProcess.exe', protocolVersion: 1, featureFlags: 1, connected: true, helloReceived: true),
     ]);
     final cli = _FakeTraceCli();
     final controller = VdTraceController(
@@ -25,17 +25,17 @@ void main()
     expect(controller.syncSessions(), isTrue);
     expect(controller.selectedPid, 200);
     expect(controller.canDumpModule, isTrue);
-    expect(controller.autoTargetTitle, contains('Endfield.exe'));
+    expect(controller.autoTargetTitle, contains('TargetProcess.exe'));
 
     await controller.dumpModule('');
 
     expect(loader.loadRequests, [r'E:\科研\VD-Trace\bin\release\VDTraceAgent.dll']);
     expect(cli.pingedPids, contains(200));
     expect(cli.modulesPids, [200]);
-    expect(cli.dumpRequests, ['200:GameAssembly.dll']);
-    expect(controller.moduleNames, ['GameAssembly.dll', 'UnityPlayer.dll']);
-    expect(controller.selectedDumpModule, 'GameAssembly.dll');
-    expect(controller.outputLog, contains('dumped GameAssembly.dll'));
+    expect(cli.dumpRequests, ['200:TargetModule.dll']);
+    expect(controller.moduleNames, ['TargetModule.dll', 'RuntimeSupport.dll']);
+    expect(controller.selectedDumpModule, 'TargetModule.dll');
+    expect(controller.outputLog, contains('dumped TargetModule.dll'));
   });
 }
 
@@ -89,7 +89,7 @@ class _FakeTraceCli extends TraceCli
   Future<CommandResult> modules(int pid, {bool includeSystemModules = false}) async
   {
     modulesPids.add(pid);
-    return const CommandResult(success: true, message: 'GameAssembly.dll\nUnityPlayer.dll\nGameAssembly.dll');
+    return const CommandResult(success: true, message: 'TargetModule.dll\nRuntimeSupport.dll\nTargetModule.dll');
   }
 
   @override

@@ -219,9 +219,6 @@ add_library(VDTraceAutoStart SHARED ${VDTRACE_AUTOSTART_SOURCES})
 vdtrace_apply_common_settings(VDTraceAutoStart)
 target_link_libraries(VDTraceAutoStart PRIVATE VDTraceStatic)
 
-add_library(VDTraceEndfieldBaseProxy SHARED src/loaders/early_loader/VDTraceEndfieldBaseProxy.cpp)
-vdtrace_apply_common_settings(VDTraceEndfieldBaseProxy)
-
 add_library(VDTraceTriggerWaitHelper SHARED ${VDTRACE_TRIGGER_HELPER_SOURCES})
 vdtrace_apply_common_settings(VDTraceTriggerWaitHelper)
 

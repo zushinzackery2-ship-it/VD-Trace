@@ -150,10 +150,10 @@ void main()
       await Future<void>.delayed(const Duration(milliseconds: 25));
       client = await _connectClient(pipeName);
 
-      _writeAll(client, _buildAgentHello(pid: 24680, processPath: r'C:\Game\Endfield.exe'));
+      _writeAll(client, _buildAgentHello(pid: 24680, processPath: r'C:\Targets\TargetProcess.exe'));
       final session = await _waitForSession(bridge);
       expect(session.pid, 24680);
-      expect(session.processPath, r'C:\Game\Endfield.exe');
+      expect(session.processPath, r'C:\Targets\TargetProcess.exe');
       expect(session.protocolVersion, 1);
       expect(session.featureFlags, 1);
 

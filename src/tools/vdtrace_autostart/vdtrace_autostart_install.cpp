@@ -127,21 +127,6 @@ namespace vdtrace::tools::autostart_cli
         RemoveActivationFile(game_directory);
         std::error_code ec;
         std::filesystem::remove(AutoStartPluginInstallPath(game_directory), ec);
-
-        const std::filesystem::path active_path = game_directory / L"EndfieldBase.dll";
-        const std::filesystem::path backup_path = game_directory / L"EndfieldBase_original.dll";
-        if (!std::filesystem::exists(backup_path))
-        {
-            return true;
-        }
-
-        DeleteFileW(active_path.c_str());
-        if (!MoveFileExW(backup_path.c_str(), active_path.c_str(), MOVEFILE_REPLACE_EXISTING))
-        {
-            error = L"恢复原始 EndfieldBase.dll 失败，error=" + std::to_wstring(GetLastError());
-            return false;
-        }
-
         return true;
     }
 

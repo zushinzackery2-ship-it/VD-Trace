@@ -8,7 +8,6 @@ using BepInEx.Unity.IL2CPP;
 namespace VDTraceAutoStartPlugin;
 
 [BepInPlugin("vdtrace.autostart.plugin", "VDTrace AutoStart Plugin", "1.0.0")]
-[BepInProcess("Endfield.exe")]
 public sealed class VdTraceAutoStartPlugin : BasePlugin
 {
     private static bool _activated;
