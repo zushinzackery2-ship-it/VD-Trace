@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "core/trigger/VDTraceTriggerCaptureInternal.h"
-
-#include <TlHelp32.h>
+#include "core/threading/VDTraceThreadEnum.h"
 
 namespace vdtrace::trigger_capture_detail
 {
@@ -103,105 +102,95 @@ namespace vdtrace::trigger_capture_detail
             return true;
         }
 
-        HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-        if (snapshot == INVALID_HANDLE_VALUE)
+        const DWORD current_thread_id = GetCurrentThreadId();
+        uintptr_t trigger_addresses[1] = {impl.configured_trigger_address};
+
+        if (!EnumerateProcessThreads(GetCurrentProcessId(), [&](const THREADENTRY32 &entry)
+        {
+            if (entry.th32ThreadID == current_thread_id
+                || entry.th32ThreadID == impl.active_thread_id.load())
+            {
+                return;
+            }
+
+            if (impl.options.block_main_thread
+                && entry.th32ThreadID == impl.main_thread_id.load())
+            {
+                std::lock_guard<std::mutex> lock(impl.known_thread_lock);
+                impl.known_thread_ids.insert(entry.th32ThreadID);
+                return;
+            }
+
+            if (only_new_threads
+                && [&impl, &entry]()
+                {
+                    std::lock_guard<std::mutex> lock(impl.known_thread_lock);
+                    return impl.known_thread_ids.find(entry.th32ThreadID) != impl.known_thread_ids.end();
+                }())
+            {
+                return;
+            }
+
+            bool already_captured = false;
+            {
+                std::lock_guard<std::mutex> lock(impl.trigger_capture_lock);
+                already_captured = HasTriggerCaptureThreadLocked(impl, entry.th32ThreadID);
+            }
+            if (already_captured)
+            {
+                std::lock_guard<std::mutex> lock(impl.known_thread_lock);
+                impl.known_thread_ids.insert(entry.th32ThreadID);
+                return;
+            }
+
+            ++candidate_count;
+            HANDLE thread_handle = OpenTracingThreadHandle(entry.th32ThreadID);
+            if (thread_handle == nullptr)
+            {
+                return;
+            }
+
+            std::wstring arm_error;
+            if (!ArmHardwareExecution(thread_handle, trigger_addresses, 1, arm_error))
+            {
+                CloseHandle(thread_handle);
+                return;
+            }
+
+            bool keep_handle = false;
+            {
+                std::lock_guard<std::mutex> lock(impl.trigger_capture_lock);
+                if (!HasTriggerCaptureThreadLocked(impl, entry.th32ThreadID))
+                {
+                    TriggerCaptureThread capture = {};
+                    capture.thread_id = entry.th32ThreadID;
+                    capture.handle = thread_handle;
+                    capture.parked = false;
+                    impl.trigger_capture_threads.push_back(capture);
+                    impl.trigger_capture_waiting_count.store(static_cast<uint32_t>(impl.trigger_capture_threads.size()));
+                    keep_handle = true;
+                }
+            }
+
+            if (!keep_handle)
+            {
+                std::wstring ignored_error;
+                ClearThreadTraceState(thread_handle, ignored_error);
+                CloseHandle(thread_handle);
+                return;
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(impl.known_thread_lock);
+                impl.known_thread_ids.insert(entry.th32ThreadID);
+            }
+            ++armed_count;
+        }))
         {
             error = L"无法枚举当前进程线程。";
             return false;
         }
 
-        const DWORD current_thread_id = GetCurrentThreadId();
-        THREADENTRY32 entry = {};
-        entry.dwSize = sizeof(entry);
-        uintptr_t trigger_addresses[1] = {impl.configured_trigger_address};
-
-        if (Thread32First(snapshot, &entry))
-        {
-            do
-            {
-                if (entry.th32OwnerProcessID != GetCurrentProcessId()
-                    || entry.th32ThreadID == current_thread_id
-                    || entry.th32ThreadID == impl.active_thread_id.load())
-                {
-                    continue;
-                }
-
-                if (impl.options.block_main_thread
-                    && entry.th32ThreadID == impl.main_thread_id.load())
-                {
-                    std::lock_guard<std::mutex> lock(impl.known_thread_lock);
-                    impl.known_thread_ids.insert(entry.th32ThreadID);
-                    continue;
-                }
-
-                if (only_new_threads
-                    && [&impl, &entry]()
-                    {
-                        std::lock_guard<std::mutex> lock(impl.known_thread_lock);
-                        return impl.known_thread_ids.find(entry.th32ThreadID) != impl.known_thread_ids.end();
-                    }())
-                {
-                    continue;
-                }
-
-                bool already_captured = false;
-                {
-                    std::lock_guard<std::mutex> lock(impl.trigger_capture_lock);
-                    already_captured = HasTriggerCaptureThreadLocked(impl, entry.th32ThreadID);
-                }
-                if (already_captured)
-                {
-                    std::lock_guard<std::mutex> lock(impl.known_thread_lock);
-                    impl.known_thread_ids.insert(entry.th32ThreadID);
-                    continue;
-                }
-
-                ++candidate_count;
-                HANDLE thread_handle = OpenTracingThreadHandle(entry.th32ThreadID);
-                if (thread_handle == nullptr)
-                {
-                    continue;
-                }
-
-                std::wstring arm_error;
-                if (!ArmHardwareExecution(thread_handle, trigger_addresses, 1, arm_error))
-                {
-                    CloseHandle(thread_handle);
-                    continue;
-                }
-
-                bool keep_handle = false;
-                {
-                    std::lock_guard<std::mutex> lock(impl.trigger_capture_lock);
-                    if (!HasTriggerCaptureThreadLocked(impl, entry.th32ThreadID))
-                    {
-                        TriggerCaptureThread capture = {};
-                        capture.thread_id = entry.th32ThreadID;
-                        capture.handle = thread_handle;
-                        capture.parked = false;
-                        impl.trigger_capture_threads.push_back(capture);
-                        impl.trigger_capture_waiting_count.store(static_cast<uint32_t>(impl.trigger_capture_threads.size()));
-                        keep_handle = true;
-                    }
-                }
-
-                if (!keep_handle)
-                {
-                    std::wstring ignored_error;
-                    ClearThreadTraceState(thread_handle, ignored_error);
-                    CloseHandle(thread_handle);
-                    continue;
-                }
-
-                {
-                    std::lock_guard<std::mutex> lock(impl.known_thread_lock);
-                    impl.known_thread_ids.insert(entry.th32ThreadID);
-                }
-                ++armed_count;
-            } while (Thread32Next(snapshot, &entry));
-        }
-
-        CloseHandle(snapshot);
         return true;
     }
 

@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "core/runtime/VDTraceInternal.h"
-
-#include <TlHelp32.h>
+#include "core/threading/VDTraceThreadEnum.h"
 
 namespace vdtrace
 {
@@ -75,51 +74,39 @@ namespace vdtrace
     bool TryFindNewProcessThread(Session::Impl &impl, DWORD &thread_id)
     {
         thread_id = 0;
-        HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-        if (snapshot == INVALID_HANDLE_VALUE)
-        {
-            return false;
-        }
-
         bool found = false;
         FILETIME newest_time = {};
-        THREADENTRY32 entry = {};
-        entry.dwSize = sizeof(entry);
-        if (Thread32First(snapshot, &entry))
+
+        EnumerateProcessThreads(GetCurrentProcessId(), [&](const THREADENTRY32 &entry)
         {
-            do
+            bool already_known = false;
             {
-                bool already_known = false;
-                {
-                    std::lock_guard<std::mutex> lock(impl.known_thread_lock);
-                    already_known = impl.known_thread_ids.find(entry.th32ThreadID) != impl.known_thread_ids.end();
-                }
+                std::lock_guard<std::mutex> lock(impl.known_thread_lock);
+                already_known = impl.known_thread_ids.find(entry.th32ThreadID) != impl.known_thread_ids.end();
+            }
+            if (already_known)
+            {
+                return;
+            }
 
-                if (entry.th32OwnerProcessID != GetCurrentProcessId() || already_known)
-                {
-                    continue;
-                }
+            HANDLE candidate = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ThreadID);
+            if (candidate == nullptr)
+            {
+                return;
+            }
 
-                HANDLE candidate = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ThreadID);
-                if (candidate == nullptr)
-                {
-                    continue;
-                }
+            FILETIME creation_time = {};
+            if (GetThreadCreationTime(candidate, creation_time)
+                && (!found || CompareFileTime(&creation_time, &newest_time) > 0))
+            {
+                newest_time = creation_time;
+                thread_id = entry.th32ThreadID;
+                found = true;
+            }
 
-                FILETIME creation_time = {};
-                if (GetThreadCreationTime(candidate, creation_time)
-                    && (!found || CompareFileTime(&creation_time, &newest_time) > 0))
-                {
-                    newest_time = creation_time;
-                    thread_id = entry.th32ThreadID;
-                    found = true;
-                }
+            CloseHandle(candidate);
+        });
 
-                CloseHandle(candidate);
-            } while (Thread32Next(snapshot, &entry));
-        }
-
-        CloseHandle(snapshot);
         return found;
     }
 
@@ -228,26 +215,10 @@ namespace vdtrace
             impl.known_thread_ids.clear();
         }
 
-        HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-        if (snapshot == INVALID_HANDLE_VALUE)
+        EnumerateProcessThreads(GetCurrentProcessId(), [&](const THREADENTRY32 &entry)
         {
-            return;
-        }
-
-        THREADENTRY32 entry = {};
-        entry.dwSize = sizeof(entry);
-        if (Thread32First(snapshot, &entry))
-        {
-            do
-            {
-                if (entry.th32OwnerProcessID == GetCurrentProcessId())
-                {
-                    std::lock_guard<std::mutex> lock(impl.known_thread_lock);
-                    impl.known_thread_ids.insert(entry.th32ThreadID);
-                }
-            } while (Thread32Next(snapshot, &entry));
-        }
-
-        CloseHandle(snapshot);
+            std::lock_guard<std::mutex> lock(impl.known_thread_lock);
+            impl.known_thread_ids.insert(entry.th32ThreadID);
+        });
     }
 }

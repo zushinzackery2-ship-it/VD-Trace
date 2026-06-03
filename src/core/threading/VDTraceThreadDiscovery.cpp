@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "core/runtime/VDTraceInternal.h"
-
-#include <TlHelp32.h>
+#include "core/threading/VDTraceThreadEnum.h"
 
 namespace vdtrace
 {
@@ -21,46 +20,33 @@ namespace vdtrace
         thread_id = 0;
         error.clear();
 
-        HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-        if (snapshot == INVALID_HANDLE_VALUE)
+        bool found = false;
+        FILETIME earliest_time = {};
+
+        if (!EnumerateProcessThreads(GetCurrentProcessId(), [&](const THREADENTRY32 &entry)
+        {
+            HANDLE thread_handle = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ThreadID);
+            if (thread_handle == nullptr)
+            {
+                return;
+            }
+
+            FILETIME creation_time = {};
+            if (GetThreadCreationTime(thread_handle, creation_time)
+                && (!found || CompareFileTime(&creation_time, &earliest_time) < 0))
+            {
+                earliest_time = creation_time;
+                thread_id = entry.th32ThreadID;
+                found = true;
+            }
+
+            CloseHandle(thread_handle);
+        }))
         {
             error = L"无法枚举当前进程线程。";
             return false;
         }
 
-        bool found = false;
-        FILETIME earliest_time = {};
-        THREADENTRY32 entry = {};
-        entry.dwSize = sizeof(entry);
-        if (Thread32First(snapshot, &entry))
-        {
-            do
-            {
-                if (entry.th32OwnerProcessID != GetCurrentProcessId())
-                {
-                    continue;
-                }
-
-                HANDLE thread_handle = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ThreadID);
-                if (thread_handle == nullptr)
-                {
-                    continue;
-                }
-
-                FILETIME creation_time = {};
-                if (GetThreadCreationTime(thread_handle, creation_time)
-                    && (!found || CompareFileTime(&creation_time, &earliest_time) < 0))
-                {
-                    earliest_time = creation_time;
-                    thread_id = entry.th32ThreadID;
-                    found = true;
-                }
-
-                CloseHandle(thread_handle);
-            } while (Thread32Next(snapshot, &entry));
-        }
-
-        CloseHandle(snapshot);
         if (!found)
         {
             error = L"没有找到可用线程。";

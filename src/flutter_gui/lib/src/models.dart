@@ -267,11 +267,11 @@ bool isAutoOutputPath(String text, int pid)
   {
     return true;
   }
-  if (RegExp(r'^\.\traces\VDTrace\.log$', caseSensitive: false).hasMatch(path))
+  if (RegExp('^\\.\\\\traces\\\\VDTrace\\.log\$', caseSensitive: false).hasMatch(path))
   {
     return true;
   }
-  if (RegExp(r'^\.\traces\VDTrace-\d+(?:-\d{8}-\d{6})?\.log$', caseSensitive: false).hasMatch(path))
+  if (RegExp('^\\.\\\\traces\\\\VDTrace-\\d+(?:-\\d{8}-\\d{6})?\\.log\$', caseSensitive: false).hasMatch(path))
   {
     return true;
   }

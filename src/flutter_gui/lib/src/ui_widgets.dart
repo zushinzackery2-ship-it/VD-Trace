@@ -85,13 +85,14 @@ class StatPill extends StatelessWidget
 
 class TextFieldRow extends StatefulWidget
 {
-  const TextFieldRow({super.key, required this.label, required this.value, required this.onChanged, this.controller, this.maxLines = 1});
+  const TextFieldRow({super.key, required this.label, required this.value, required this.onChanged, this.controller, this.maxLines = 1, this.enabled = true});
 
   final String label;
   final String value;
   final void Function(String value) onChanged;
   final TextEditingController? controller;
   final int maxLines;
+  final bool enabled;
 
   @override
   State<TextFieldRow> createState() => _TextFieldRowState();
@@ -100,12 +101,41 @@ class TextFieldRow extends StatefulWidget
 class _TextFieldRowState extends State<TextFieldRow>
 {
   late final TextEditingController controller;
+  bool _ownsController = false;
 
   @override
   void initState()
   {
     super.initState();
-    controller = widget.controller ?? TextEditingController(text: widget.value);
+    if (widget.controller != null)
+    {
+      controller = widget.controller!;
+    }
+    else
+    {
+      controller = TextEditingController(text: widget.value);
+      _ownsController = true;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant TextFieldRow oldWidget)
+  {
+    super.didUpdateWidget(oldWidget);
+    if (_ownsController && widget.value != oldWidget.value && widget.value != controller.text)
+    {
+      controller.text = widget.value;
+    }
+  }
+
+  @override
+  void dispose()
+  {
+    if (_ownsController)
+    {
+      controller.dispose();
+    }
+    super.dispose();
   }
 
   @override
@@ -116,6 +146,7 @@ class _TextFieldRowState extends State<TextFieldRow>
       child: TextField(
         controller: controller,
         maxLines: widget.maxLines,
+        enabled: widget.enabled,
         decoration: InputDecoration(labelText: widget.label),
         onChanged: widget.onChanged,
       ),
@@ -125,43 +156,51 @@ class _TextFieldRowState extends State<TextFieldRow>
 
 class SwitchRow extends StatelessWidget
 {
-  const SwitchRow({super.key, required this.label, required this.value, required this.onChanged});
+  const SwitchRow({super.key, required this.label, required this.value, required this.onChanged, this.enabled = true});
 
   final String label;
   final bool value;
   final void Function(bool value) onChanged;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context)
   {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      decoration: BoxDecoration(color: vdPanelSoft, borderRadius: BorderRadius.circular(12), border: Border.all(color: vdLine)),
-      child: SwitchListTile(value: value, title: Text(label), onChanged: onChanged),
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.45,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        decoration: BoxDecoration(color: vdPanelSoft, borderRadius: BorderRadius.circular(12), border: Border.all(color: vdLine)),
+        child: SwitchListTile(value: value, title: Text(label), onChanged: enabled ? onChanged : null),
+      ),
     );
   }
 }
 
 class DropdownRow extends StatelessWidget
 {
-  const DropdownRow({super.key, required this.label, required this.value, required this.values, required this.onChanged});
+  const DropdownRow({super.key, required this.label, required this.value, required this.values, required this.onChanged, this.enabled = true});
 
   final String label;
   final String value;
   final List<String> values;
   final void Function(String value) onChanged;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context)
   {
     final current = values.contains(value) ? value : values.first;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: DropdownButtonFormField<String>(
-        initialValue: current,
-        decoration: InputDecoration(labelText: label),
-        items: [for (final item in values) DropdownMenuItem(value: item, child: Text(item))],
-        onChanged: (value) => value == null ? null : onChanged(value),
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.45,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: DropdownButtonFormField<String>(
+          initialValue: current,
+          decoration: InputDecoration(labelText: label),
+          items: [for (final item in values) DropdownMenuItem(value: item, child: Text(item))],
+          onChanged: enabled ? (value) => value == null ? null : onChanged(value) : null,
+        ),
       ),
     );
   }
@@ -184,28 +223,39 @@ class ActionButton extends StatelessWidget
 
 class TextPanel extends StatelessWidget
 {
-  const TextPanel({super.key, required this.title, required this.text, this.minHeight = 180});
+  const TextPanel({super.key, required this.title, required this.text, this.minHeight = 180, this.actions = const []});
 
   final String title;
   final String text;
   final double minHeight;
+  final List<Widget> actions;
 
   @override
   Widget build(BuildContext context)
   {
     return SectionCard(
       title: title,
-      child: Container(
-        constraints: BoxConstraints(minHeight: minHeight),
-        width: double.infinity,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: const Color(0xfff8fbff),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: vdLine),
-          boxShadow: [BoxShadow(color: vdBlue.withValues(alpha: 0.06), blurRadius: 18)],
-        ),
-        child: SelectableText(text.isEmpty ? ' ' : text, style: const TextStyle(fontFamily: 'Consolas', fontSize: 12, height: 1.28, color: vdTextStrong)),
+      subtitle: actions.isEmpty ? null : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (actions.isNotEmpty) Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Wrap(spacing: 8, children: actions),
+          ),
+          Container(
+            constraints: BoxConstraints(minHeight: minHeight),
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xfff8fbff),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: vdLine),
+              boxShadow: [BoxShadow(color: vdBlue.withValues(alpha: 0.06), blurRadius: 18)],
+            ),
+            child: SelectableText(text.isEmpty ? ' ' : text, style: const TextStyle(fontFamily: 'Consolas', fontSize: 12, height: 1.28, color: vdTextStrong)),
+          ),
+        ],
       ),
     );
   }

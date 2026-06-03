@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import 'depth_filters.dart';
 import 'loader_bridge.dart';
 import 'memory_codec.dart';
@@ -11,7 +13,10 @@ import 'trace_preview.dart';
 import 'trace_profile.dart';
 import 'trace_settings.dart';
 
-class VdTraceController
+part 'vdtrace_controller_memory.dart';
+part 'vdtrace_controller_modules.dart';
+
+class VdTraceController extends ChangeNotifier
 {
   VdTraceController({Directory? repoRootOverride, LoaderBridge? loaderBridge, TraceCli? cli, TraceProfile? profile})
       : repoRoot = repoRootOverride ?? repoRootFromExecutableContext(),
@@ -39,11 +44,13 @@ class VdTraceController
   List<String> moduleNames = [];
   String? selectedDumpModule;
   String memoryResultText = '';
+  String? lastError;
   bool busy = false;
   bool traceRunning = false;
   bool traceWriting = false;
   bool _moduleRefreshPending = false;
   Timer? _pollTimer;
+  Timer? _saveDebounce;
 
   List<LoaderSessionSnapshot> get sessions => loaderBridge.snapshotSessions();
   List<LoaderLogEntry> get loaderLogs => loaderBridge.snapshotLogs();
@@ -73,7 +80,7 @@ class VdTraceController
   bool get canRefreshModules => hasTarget && !busy;
   bool get canDumpModule => hasTarget && !busy;
   bool get canStartTrace => hasTarget && !busy && !traceRunning && !traceWriting;
-  bool get canStopTrace => hasTarget && !busy && (traceRunning || traceWriting);
+  bool get canStopTrace => hasTarget && !busy && traceRunning && !traceWriting;
   bool get canReadMemory => hasTarget && !busy;
   bool get canWriteMemory => hasTarget && !busy;
 
@@ -108,11 +115,22 @@ class VdTraceController
     _pollTimer = Timer.periodic(const Duration(milliseconds: 750), (_) => unawaited(refreshRuntime()));
   }
 
+  @override
   void dispose()
   {
     _pollTimer?.cancel();
+    _saveDebounce?.cancel();
     loaderBridge.stop();
     saveTraceProfile(repoRoot, profile);
+    super.dispose();
+  }
+
+  void notify() => notifyListeners();
+
+  void scheduleProfileSave()
+  {
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(const Duration(seconds: 3), () => saveTraceProfile(repoRoot, profile));
   }
 
   void selectSession(LoaderSessionSnapshot session)
@@ -155,6 +173,8 @@ class VdTraceController
         : currentSessions.where((session) => session.pid == selectedPid).firstOrNull;
     if (current == null)
     {
+      traceRunning = false;
+      traceWriting = false;
       selectSession(currentSessions.first);
       _append('自动选中 Loader 会话：${currentSessions.first.displayName}');
       return true;
@@ -167,28 +187,9 @@ class VdTraceController
     syncSessions();
     await refreshStatus();
     unawaited(refreshModulesIfAgentOnline());
+    notifyListeners();
   }
 
-  String depthSummary()
-  {
-    return buildDepthFilterSummary(
-      profile.callDepth,
-      profile.outsideCallDepthEnabled,
-      profile.outsideCallDepth,
-      profile.outsideExecutionMode,
-      profile.anonymousExecCallDepthEnabled,
-      profile.anonymousExecCallDepth,
-      profile.anonymousExecExecutionMode,
-      profile.moduleCallDepths,
-      profile.idleEscapeEnabled,
-      profile.idleEscapeThreshold,
-    );
-  }
-
-  String profileSummary()
-  {
-    return formatTraceProfile(profile);
-  }
 
   Future<void> refreshStatus() async
   {
@@ -225,7 +226,7 @@ class VdTraceController
       {
         return;
       }
-      await _refreshModulesForSession(session, requireAgentOnline: false);
+      await refreshModulesForSession(session, requireAgentOnline: false);
     });
   }
 
@@ -238,7 +239,7 @@ class VdTraceController
       {
         return;
       }
-      await _refreshModulesForSession(session, requireAgentOnline: false);
+      await refreshModulesForSession(session, requireAgentOnline: false);
     });
   }
 
@@ -251,8 +252,8 @@ class VdTraceController
       {
         return;
       }
-      await _refreshModulesForSession(session, requireAgentOnline: false);
-      final module = _selectDumpModule(moduleName);
+      await refreshModulesForSession(session, requireAgentOnline: false);
+      final module = selectDumpModuleByName(moduleName);
       if (module.isEmpty)
       {
         _append('Dump+Fix 失败：Agent 在线但没有返回可用模块。');
@@ -303,37 +304,6 @@ class VdTraceController
     });
   }
 
-  Future<void> readMemory(String address, String sizeText) async
-  {
-    final session = _requireSession();
-    await _runAction(() async
-    {
-      if (!await _ensureAgentOnline(session))
-      {
-        return;
-      }
-      final size = parseMemorySize(sizeText);
-      final result = await cli.readMemory(session.pid, address.trim(), size);
-      memoryResultText = result.message;
-      _append(result.message);
-    });
-  }
-
-  Future<void> writeMemory(String address, String mode, String value) async
-  {
-    final session = _requireSession();
-    await _runAction(() async
-    {
-      if (!await _ensureAgentOnline(session))
-      {
-        return;
-      }
-      final data = encodeMemoryWriteBytes(mode, value);
-      final result = await cli.writeMemory(session.pid, address.trim(), data);
-      memoryResultText = result.message;
-      _append(result.message);
-    });
-  }
 
   LoaderSessionSnapshot _requireSession()
   {
@@ -366,101 +336,6 @@ class VdTraceController
     return ready;
   }
 
-  Future<void> refreshModulesIfAgentOnline() async
-  {
-    if (busy || _moduleRefreshPending || moduleNames.isNotEmpty)
-    {
-      return;
-    }
-    final session = selectedSession;
-    if (session == null)
-    {
-      return;
-    }
-    _moduleRefreshPending = true;
-    try
-    {
-      final online = await cli.ping(session.pid);
-      if (!online.success)
-      {
-        return;
-      }
-      await _refreshModulesForSession(session, requireAgentOnline: false, silent: true);
-    }
-    finally
-    {
-      _moduleRefreshPending = false;
-    }
-  }
-
-  Future<bool> _refreshModulesForSession(
-    LoaderSessionSnapshot session, {
-    required bool requireAgentOnline,
-    bool silent = false,
-  }) async
-  {
-    if (requireAgentOnline && !await _ensureAgentOnline(session))
-    {
-      return false;
-    }
-    final result = await cli.modules(session.pid);
-    moduleList = result.message;
-    if (!result.success)
-    {
-      if (!silent)
-      {
-        _append(result.message);
-      }
-      return false;
-    }
-
-    moduleNames = result.message
-        .split(RegExp(r'\r?\n'))
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .fold<List<String>>(<String>[], (modules, module)
-        {
-          if (!modules.any((existing) => existing.toLowerCase() == module.toLowerCase()))
-          {
-            modules.add(module);
-          }
-          return modules;
-        })
-        .toList();
-    if (moduleNames.isEmpty)
-    {
-      selectedDumpModule = null;
-      if (!silent)
-      {
-        _append('模块列表为空：Agent 没有返回可 Dump 的真实模块。');
-      }
-      return false;
-    }
-    if (moduleNames.isNotEmpty && !moduleNames.contains(selectedDumpModule))
-    {
-      selectedDumpModule = moduleNames.first;
-    }
-    if (!silent)
-    {
-      _append('模块列表已刷新：${moduleNames.length} 个模块。');
-    }
-    return true;
-  }
-
-  String _selectDumpModule(String requested)
-  {
-    final trimmed = requested.trim();
-    if (trimmed.isNotEmpty && moduleNames.any((module) => module.toLowerCase() == trimmed.toLowerCase()))
-    {
-      return trimmed;
-    }
-    final selected = selectedDumpModule?.trim() ?? '';
-    if (selected.isNotEmpty && moduleNames.any((module) => module.toLowerCase() == selected.toLowerCase()))
-    {
-      return selected;
-    }
-    return moduleNames.isEmpty ? '' : moduleNames.first;
-  }
 
   Future<void> _runAction(Future<void> Function() action) async
   {
@@ -475,30 +350,33 @@ class VdTraceController
     }
     catch (error)
     {
-      _append('$error');
+      final message = '$error';
+      _append(message);
+      lastError = message;
     }
     finally
     {
       busy = false;
+      notifyListeners();
     }
   }
 
   void _append(String text)
   {
     final stamp = DateTime.now().toIso8601String().substring(11, 19);
-    outputLog = '$outputLog[$stamp] $text\n';
-  }
-}
-
-extension _FirstOrNull<T> on Iterable<T>
-{
-  T? get firstOrNull
-  {
-    final iterator = this.iterator;
-    if (iterator.moveNext())
+    _logLines.add('[$stamp] $text');
+    if (_logLines.length > 2048)
     {
-      return iterator.current;
+      _logLines.removeRange(0, _logLines.length - 2048);
     }
-    return null;
+    outputLog = _logLines.join('\n');
+  }
+
+  final List<String> _logLines = [];
+
+  void clearLog()
+  {
+    _logLines.clear();
+    outputLog = '';
   }
 }
