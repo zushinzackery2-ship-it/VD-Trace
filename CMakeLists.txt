@@ -122,6 +122,15 @@ set(VDTRACE_AUTOSTART_SOURCES
     src/control/ipc_client/VDTraceControlSupportUtil.cpp
 )
 
+set(VDTRACE_LITE_SOURCES
+    src/lite/LiteTraceMain.cpp
+    src/lite/LiteTraceConfig.cpp
+    src/lite/LiteTraceConfigParse.cpp
+    src/lite/LiteTraceConfigText.cpp
+    src/lite/LiteTraceRuntime.cpp
+    src/autostart/VDTraceAutoStartConfigText.cpp
+)
+
 set(VDTRACE_CONTROL_SOURCES
     src/control/ipc_client/VDTraceControlSupport.cpp
     src/control/ipc_client/VDTraceControlSupportUtil.cpp
@@ -224,6 +233,10 @@ target_link_libraries(VDTraceAgent PRIVATE VDTraceStatic)
 add_library(VDTraceAutoStart SHARED ${VDTRACE_AUTOSTART_SOURCES})
 vdtrace_apply_common_settings(VDTraceAutoStart)
 target_link_libraries(VDTraceAutoStart PRIVATE VDTraceStatic)
+
+add_library(LiteTrace SHARED ${VDTRACE_LITE_SOURCES})
+vdtrace_apply_common_settings(LiteTrace)
+target_link_libraries(LiteTrace PRIVATE VDTraceStatic)
 
 add_library(VDTraceTriggerWaitHelper SHARED ${VDTRACE_TRIGGER_HELPER_SOURCES})
 vdtrace_apply_common_settings(VDTraceTriggerWaitHelper)

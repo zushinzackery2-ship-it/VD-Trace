@@ -1,0 +1,101 @@
+#include "pch.h"
+#include "lite/LiteTraceConfig.h"
+
+namespace vdtrace::lite
+{
+    namespace
+    {
+        std::filesystem::path ModuleDirectoryFromAddress(const void *address)
+        {
+            HMODULE module = nullptr;
+            if (!GetModuleHandleExW(
+                    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                    reinterpret_cast<LPCWSTR>(address),
+                    &module))
+            {
+                return std::filesystem::current_path();
+            }
+
+            std::wstring buffer(MAX_PATH, L'\0');
+            DWORD length = GetModuleFileNameW(module, buffer.data(), static_cast<DWORD>(buffer.size()));
+            while (length == buffer.size())
+            {
+                buffer.resize(buffer.size() * 2);
+                length = GetModuleFileNameW(module, buffer.data(), static_cast<DWORD>(buffer.size()));
+            }
+
+            if (length == 0)
+            {
+                return std::filesystem::current_path();
+            }
+
+            buffer.resize(length);
+            return std::filesystem::path(buffer).parent_path();
+        }
+    }
+
+    std::filesystem::path LiteTraceModuleDirectory()
+    {
+        return ModuleDirectoryFromAddress(reinterpret_cast<const void *>(&LiteTraceModuleDirectory));
+    }
+
+    std::filesystem::path DefaultLiteTraceConfigPath()
+    {
+        const std::filesystem::path working_directory_path = std::filesystem::current_path() / L"LiteTrace.ini";
+        if (std::filesystem::exists(working_directory_path))
+        {
+            return working_directory_path.lexically_normal();
+        }
+
+        const std::filesystem::path module_directory_path = LiteTraceModuleDirectory() / L"LiteTrace.ini";
+        return module_directory_path.lexically_normal();
+    }
+
+    std::string BuildDefaultLiteTraceConfigText()
+    {
+        return
+            "; LiteTrace lightweight in-process tracer\n"
+            "; Inject LiteTrace.dll into the target process: it reads this file (current\n"
+            "; working directory first, then the LiteTrace.dll folder), installs the\n"
+            "; [trace] trigger_point breakpoint, waits for it to fire, records the trace,\n"
+            "; and can end the process afterwards.\n"
+            "; Core is reused from VD-Trace (VDTraceStatic Session/Options); no Agent or\n"
+            "; IPC is involved, so this is lighter than VDTraceAutoStart.\n"
+            "; backend supports DR / TF only. call_depth uses single / all / number.\n"
+            "; outside_execution_mode / anonymous_exec_execution_mode support EDGE or TF.\n"
+            "; module_call_depths format uses Module.dll:3:TF entries separated by commas.\n"
+            "; trigger_point format: Module.dll+0xRVA or Module.dll!0xRVA or 0xABSOLUTE.\n"
+            "\n"
+            "[trace]\n"
+            "modules = \n"
+            "output_path = .\\traces\\LiteTrace.log\n"
+            "trigger_point = \n"
+            "trigger_enabled = true\n"
+            "probe_spec = \n"
+            "thread_id = 0\n"
+            "auto_select_thread = true\n"
+            "block_main_thread = false\n"
+            "max_events = 20000\n"
+            "backend = DR\n"
+            "all_events = false\n"
+            "idle_escape_threshold = 32\n"
+            "call_depth = 4\n"
+            "outside_call_depth = \n"
+            "outside_execution_mode = EDGE\n"
+            "anonymous_exec_call_depth = \n"
+            "anonymous_exec_execution_mode = EDGE\n"
+            "module_call_depths = \n"
+            "trace_outside_modules = false\n"
+            "repeat_hits = false\n"
+            "enhanced_sampling = false\n"
+            "root_stop_on_return = false\n"
+            "async_thread_handoff = true\n"
+            "\n"
+            "[lite]\n"
+            "; max_events above is the step count. exit_process_on_finish ends the process\n"
+            "; once the trace stops (step count reached or finish_timeout_ms elapsed).\n"
+            "exit_process_on_finish = false\n"
+            "finish_timeout_ms = 0\n"
+            "poll_interval_ms = 50\n";
+    }
+}
