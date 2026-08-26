@@ -230,6 +230,8 @@ E:\KDR\flutter\bin\flutter.bat build windows --release
 
 Flutter release 产物位于 `src\flutter_gui\build\windows\x64\runner\Release\vdtrace_gui.exe`，集成交付时复制到 `bin\release\`。
 
+图形界面采用无边框深色控制台风格：自定义标题栏、实时目标/状态头（PID、追踪/写入状态、后端、会话数），以及左侧导航栏在八个分区间切换（核心 / 策略 / 过滤 / 观测 / 内存 / 预览 / 日志 / 模块）。运行期轮询为自调度非重入模式，用户操作期间自动暂停探测，仅在 Agent 上线/下线切换时刷新模块列表。
+
 ### BepInEx 插件
 
 使用 .NET SDK 构建：

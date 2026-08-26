@@ -169,17 +169,23 @@ This is useful when the on-disk file is not enough to understand the loaded runt
 
 ## Flutter GUI
 
-The Flutter Windows GUI is the current primary graphical control surface.
+The Flutter Windows GUI is the current primary graphical control surface. It uses
+a frameless dark "diagnostics console" shell: a custom title bar, a live target/
+status header, and a left navigation rail that switches between eight sections
+(Core, Policy, Depth Filter, Observer, Memory, Trace, Log, Modules).
 
 | GUI workflow | Description |
 |:--|:--|
 | Automatic target discovery | Finds Loader Control sessions and presents the current target |
+| Live status header | Shows PID, trace/write state, backend and session count as status chips |
 | Agent loading | Sends `LoadDllRequest` to load `VDTraceAgent.dll` into the target |
 | Agent readiness checks | Ensures the Agent is online before dump, memory, or trace operations |
+| Adaptive polling | Self-scheduling runtime poll that pauses probes during user actions and refreshes modules on Agent online/offline transitions |
 | Module refresh | Loads the real module list from the target process |
 | Dump+Fix | Selects a real module and exports a repaired dump |
+| Trace preview | Live tail of the trace output file with copy and address→memory helpers |
 | Output view | Displays CLI/Agent results and workflow status |
-| Regression coverage | Includes Loader IPC simulation tests and controller workflow tests |
+| Regression coverage | Loader IPC simulation, controller workflow, navigation and output-path tests |
 
 ---
 
