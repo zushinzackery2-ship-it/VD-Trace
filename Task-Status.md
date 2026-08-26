@@ -65,6 +65,66 @@ Verification (Flutter 3.47.1):
 - `flutter analyze` → No issues found.
 - `flutter test` → 6 passed, 3 skipped (the Windows-only real-Agent Loader tests).
 
+## Work log — C++ business layer (`src/core`, `src/agent`, `src/control`, `src/tests`)
+
+Second iteration, on the same `experimental` branch. The C++ layer was already
+cleanly modularized (each subsystem uses a `X.cpp` + `X.h` + `XInternal.h` +
+`XSupport.cpp` split, Allman braces throughout), so the responsible work here was
+to enforce the project's own rules across the whole layer, fix the concrete defect
+the review turned up, and verify everything that can be verified without MSVC —
+rather than blind-rewriting a working, untestable Windows tracer.
+
+Bug / lifecycle fix:
+
+- `WaitForLoaderSessionInternal` (loader-session IPC) computed the
+  `ConnectNamedPipe` wait timeout as `deadline - GetTickCount64()` on unsigned
+  `ULONGLONG`. If the tick counter reached the deadline between the loop guard and
+  that computation, the subtraction wrapped to a huge value, was capped to
+  `0xFFFFFFFF`, and cast to `DWORD` — which `WaitForSingleObject` treats as
+  `INFINITE`, hanging the caller. Now computed with an explicit `now < deadline`
+  guard so an elapsed deadline yields `0` and the loop exits cleanly.
+
+300-line rule — six oversized files split into cohesive modules (each unit now
+< 300 lines), matching the existing `Internal.h` + `Support`/`Format` convention:
+
+- `src/agent/VDTraceAgentMemorySupport.cpp` → kept address parsing/resolution +
+  byte writing; preview formatting moved to `VDTraceAgentMemoryFormat.cpp`.
+- `src/agent/VDTraceAgentDump.cpp` → module enumeration / image copy / PE path
+  helpers moved to `VDTraceAgentDumpSupport.cpp` behind the new
+  `VDTraceAgentDumpInternal.h` (`vdtrace::agent::dump_detail`).
+- `src/core/depth_filter/VDTraceDepthFilter.cpp` → spec tokenizer/parser helpers
+  moved to `VDTraceDepthFilterParse.cpp` behind the new
+  `VDTraceDepthFilterInternal.h` (`vdtrace::depth_filter_detail`).
+- `src/core/extender/VDTraceExtenderProcess.cpp` → event/section formatting moved
+  to `VDTraceExtenderProcessFormat.cpp` (declarations already in the existing
+  `VDTraceExtenderInternal.h`).
+- `src/tests/decrypt_smoke/VDTraceDecryptSmokeHelperRuntime.cpp` → the JIT stage
+  emitter (`CodeWriter` + `BuildDynamicStage`) moved to
+  `VDTraceDecryptSmokeHelperJit.cpp` (`decrypt_smoke_helper::jit_detail`).
+  `BuildDynamicStage` now returns the executable buffer + function pointer via
+  out-parameters so the runtime globals and every address-taking export stay in
+  the runtime TU. Emitted machine-code bytes are unchanged.
+- `src/tests/trigger_wait/vdtrace_trigger_wait_test.cpp` → path/log/event-line
+  helpers moved to `vdtrace_trigger_wait_support.{h,cpp}` (`trigger_wait_test`).
+  The traced workload functions and their file-local globals stay in the test TU
+  so tracing semantics are unaffected.
+
+`CMakeLists.txt` updated with every new translation unit. No public API, IPC
+protocol (`VDTraceIpc.h`, loader `MessageKind`/payloads), enum, or on-wire layout
+was changed — the agent IPC server, control client, thread enumeration
+(owner-PID-filtered) and DllMain lifecycle were reviewed and left intact.
+
+Verification done here (Linux container, no MSVC):
+
+- Structural verifier over the whole non-third-party C++ layer: no file > 300
+  lines; balanced braces/parentheses (comment/string-aware); every header carries
+  an include guard.
+- Split integrity: each moved helper has exactly one definition, present in its
+  new module and removed from the original; every new `.cpp` is wired into
+  `CMakeLists.txt`; declarations in the new/`*Internal.h` headers match the
+  definitions.
+- Logic review of the touched IPC/lifecycle/threading paths.
+
 ## Conventions honored
 
 - Allman brace style throughout Dart sources.
@@ -72,7 +132,21 @@ Verification (Flutter 3.47.1):
 - No cross-project file references.
 - Committer identity: Vernal <zushinzackery2@gmail.com>.
 
-## Not done (needs a Windows toolchain)
+## Windows-side verification still required (no MSVC in this container)
 
-- Building/validating the C++ core, Agent, CLI tools and smoke suite (MSVC + Windows SDK).
+The C++ changes were reviewed and checked structurally, but must be built and run
+on Windows with Visual Studio 2022 + the Windows SDK before shipping:
+
+- `cmake --build` of every target (`VDTrace`, `VDTraceStatic`, `VDTraceAgent`,
+  `VDTraceAutoStart`, CLI tools, all smoke tests). Confirms the six split
+  translation units and their new internal headers compile and link with no
+  duplicate/missing symbols under `/W4 /permissive-`.
+- Run the smoke suite (`vdtrace_smoke_suite_test` and the individual
+  session/async/agent/trigger-wait/rootstop/stop-recovery/decrypt tests) to
+  confirm no behavior regressed from the refactor. The decrypt-smoke helper in
+  particular relies on exact emitted machine code and function addresses — verify
+  its encrypt/decrypt round-trip and the reported stage addresses still match.
+- Exercise the loader-session IPC path (GUI/CLI attaching to a target) to confirm
+  the `WaitForLoaderSessionInternal` timeout fix behaves correctly at and past the
+  deadline.
 - Building the Flutter Windows runner and the BepInEx plugin (.NET).
