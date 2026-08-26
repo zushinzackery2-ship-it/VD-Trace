@@ -98,6 +98,7 @@ set(VDTRACE_CORE_SOURCES
 
 set(VDTRACE_AGENT_SOURCES
     src/agent/VDTraceAgentDump.cpp
+    src/agent/VDTraceAgentDumpSupport.cpp
     src/agent/VDTraceAgentExports.cpp
     src/agent/VDTraceAgentIpc.cpp
     src/agent/VDTraceAgentIpcSupport.cpp
