@@ -245,6 +245,63 @@ tracer with no leftover AutoStart/Agent logic:
 - Linux checks: MinGW `-std=c++20 -municode -Wall -Wextra` syntax-check of all five
   `src/lite` sources passed clean; line-count/brace-balance re-verified (max 192).
 
+### LiteTrace step / specified modes
+
+LiteTrace now runs in one of two explicit modes, selected by `[lite] mode`:
+
+- `mode = step` (default) — trace from `trigger_point` for `max_events` steps, then
+  stop. Every end-point knob is ignored: `end_point` is cleared and
+  `root_stop_on_return` is forced off during config load (`ApplyLiteMode`), so a step
+  run is bounded purely by the step count.
+- `mode = specified` — trace from `trigger_point` until execution reaches `end_point`.
+  `max_events` is forced to 0 (unlimited steps), so the step count is ignored. The run
+  is bounded by the end point (and, if the user also set `root_stop_on_return`, by the
+  root frame returning, whichever happens first). `BuildTraceOptions` rejects a
+  `specified` config that has neither `end_point` nor `root_stop_on_return`, so an
+  unbounded trace cannot be started by accident.
+
+`end_point` reuses the `trigger_point` grammar (`Module.dll+0xRVA` /
+`Module.dll!0xRVA` / `0xABSOLUTE`) and is parsed with the same `ParseLiteTriggerPoint`
+helper into `Options::stop_module_name` + `Options::stop_address`.
+
+Core support (minimal `Options` extension, shared by all trace consumers, opt-in and
+backward compatible — disabled when `stop_address == 0` and `stop_module_name` empty):
+
+- `include/VDTrace/VDTrace.h` — added `Options::stop_module_name` +
+  `Options::stop_address` (RVA when a module name is set, otherwise absolute).
+- `src/core/runtime/VDTraceInternal.h` / `VDTraceRuntimeConfig.cpp` — added
+  `Session::Impl::resolved_stop_address` and `ResolveStopAddress` (mirrors
+  `ResolveTriggerAddress`); `VDTraceRuntimeConfigure.cpp` resolves it in `Configure`.
+- `src/core/hardware/VDTraceHardwareException.cpp` — DR backend: after the arriving
+  edge is recorded, if the faulted RIP equals `resolved_stop_address` the session
+  disarms and stops (checked just before the existing `max_events` stop, same pattern).
+- `src/core/decoder/VDTraceDecoder.cpp` — TF backend: if the next instruction to
+  execute is `resolved_stop_address`, stop before running it (checked ahead of the
+  root-return / `max_events` branches).
+- `src/core/runtime/VDTraceSession.cpp` — `DescribeState` now reports `stop=0x… / off`.
+
+End-point matching granularity: in DR mode the stop fires when a traced control-flow
+edge *arrives at* `end_point` (so pick a real edge target — a function entry, call
+target, or branch target; the natural choice for an "end point"). In TF mode
+(`backend = TF`) any instruction address matches exactly. Documented in the INI.
+
+Linux checks: MinGW `-std=c++17 -fsyntax-only` on all edited core + lite sources
+passed clean (the lone `std::memcpy` note in `VDTraceDecoder.cpp` is pre-existing and
+comes from the standalone check not pulling `<cstring>` transitively the way the MSVC
+PCH does — unrelated to this change; confirmed clean with `-include cstring`).
+
+Windows-side verification still required (LiteTrace modes / stop address):
+
+- Build the `LiteTrace` target and `VDTraceStatic` with MSVC and confirm the new
+  `Options` fields and stop checks compile under `/W4 /permissive-`.
+- `mode = specified`: inject with a valid `trigger_point` + `end_point`; confirm the
+  trace stops when the end point is reached and the last recorded event is the
+  transition into it (DR) / the instruction just before it (TF).
+- `mode = step`: confirm `end_point` / `root_stop_on_return` are ignored and the trace
+  stops exactly at `max_events`.
+- Confirm a `specified` config with no end point is rejected with a clear log message
+  rather than tracing forever.
+
 ## Simulated fast-forward (sim-skip) for the DR backend
 
 Goal: stop paying a single-step/DR exception on control-flow edges whose outcome is
