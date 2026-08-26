@@ -157,7 +157,7 @@ Modules (all Allman, all ≤ 300 lines, in `src/lite/`):
   (cwd → DLL directory), and the default INI template text.
 - `LiteTraceRuntime.{h,cpp}` — builds `Options` from the config, opens the
   recorder, `Session::Configure`/`Start`, polls `Session::IsRunning()` until the
-  trace stops (step count reached, or `finish_timeout_ms` elapsed), `Stop`s, flushes
+  trace stops (step count reached), `Stop`s, flushes
   the recorder (destruct drains + `FlushFileBuffers`), then `ExitProcess` when
   `exit_process_on_finish` is set. Writes a `traces/LiteTrace-<pid>.log` diagnostic.
 - `LiteTraceMain.cpp` — `DllMain(PROCESS_ATTACH)` calls `DisableThreadLibraryCalls`
