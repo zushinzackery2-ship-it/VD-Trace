@@ -148,6 +148,8 @@ namespace vdtrace
         std::wstring depth_filter_spec;
         FlowHitPolicy hit_policy = FlowHitPolicy::FirstSeen;
         uint32_t hot_bypass_threshold = 32;
+        bool sim_fast_forward = false;
+        bool sim_fast_forward_indirect = false;
         bool enhanced_sampling = false;
         std::wstring trigger_module_name;
         uintptr_t trigger_address = 0;

@@ -82,6 +82,9 @@ set(VDTRACE_CORE_SOURCES
     src/core/runtime/VDTraceSession.cpp
     src/core/sampling/VDTraceEnhancedSampling.cpp
     src/core/sampling/VDTraceEnhancedSamplingFormat.cpp
+    src/core/sim_fastforward/VDTraceSimFastForward.cpp
+    src/core/sim_fastforward/VDTraceSimFastForwardEmit.cpp
+    src/core/sim_fastforward/VDTraceSimFastForwardResolve.cpp
     src/core/static_refs/VDTraceStaticRefs.cpp
     src/core/static_refs/VDTraceStaticRefsExport.cpp
     src/core/static_refs/VDTraceStaticRefsFormat.cpp

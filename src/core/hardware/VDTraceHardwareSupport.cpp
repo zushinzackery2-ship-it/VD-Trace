@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "core/runtime/VDTraceInternal.h"
+#include "core/sim_fastforward/VDTraceSimFastForward.h"
 
 namespace vdtrace
 {
@@ -96,6 +97,13 @@ namespace vdtrace
 
     bool ProgramHardwareObservationImpl(Session::Impl &impl, uintptr_t entry, CONTEXT *context, std::wstring &error)
     {
+        if (impl.options.sim_fast_forward)
+        {
+            // Collapse any deterministic unconditional-jump chain into predicted edges,
+            // then arm real hardware only on the first uncertain frontier block.
+            entry = sim_fastforward::FastForwardDeterministicFlow(impl, entry, context);
+        }
+
         BasicBlockInfo block = {};
         if (!AnalyzeBasicBlock(entry, block, error))
         {

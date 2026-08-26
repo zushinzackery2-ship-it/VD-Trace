@@ -165,6 +165,8 @@ namespace vdtrace::lite
         config.block_main_thread = as::ParseAutoStartBool(as::GetAutoStartValue(sections, L"trace", L"block_main_thread", L"false"), false);
         config.trace_outside_modules = as::ParseAutoStartBool(as::GetAutoStartValue(sections, L"trace", L"trace_outside_modules", L"false"), false);
         config.enhanced_sampling = as::ParseAutoStartBool(as::GetAutoStartValue(sections, L"trace", L"enhanced_sampling", L"false"), false);
+        config.sim_fast_forward = as::ParseAutoStartBool(as::GetAutoStartValue(sections, L"trace", L"sim_fast_forward", L"false"), false);
+        config.sim_fast_forward_indirect = as::ParseAutoStartBool(as::GetAutoStartValue(sections, L"trace", L"sim_fast_forward_indirect", L"false"), false);
         config.trigger_enabled = as::ParseAutoStartBool(as::GetAutoStartValue(sections, L"trace", L"trigger_enabled", L"true"), true);
         config.stop_on_root_return = as::ParseAutoStartBool(as::GetAutoStartValue(sections, L"trace", L"root_stop_on_return", L"false"), false);
         config.async_thread_handoff = as::ParseAutoStartBool(as::GetAutoStartValue(sections, L"trace", L"async_thread_handoff", L"true"), true);

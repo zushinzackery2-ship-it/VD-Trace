@@ -42,6 +42,8 @@ namespace vdtrace::lite
         std::wstring module_call_depths;
         FlowHitPolicy hit_policy = FlowHitPolicy::FirstSeen;
         uint32_t hot_bypass_threshold = 32;
+        bool sim_fast_forward = false;
+        bool sim_fast_forward_indirect = false;
         bool enhanced_sampling = false;
         bool trigger_enabled = true;
         bool stop_on_root_return = false;
