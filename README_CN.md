@@ -43,6 +43,8 @@
 | **HeapPeek 堆观测** | 运行时堆内存变化监控，支持 inline suffix 输出和堆操作追踪 |
 | **Extender 扩展分析** | 可插拔的事件处理扩展框架，支持自定义分析逻辑和输出格式 |
 | **BepInEx 自动启动** | BepInEx 插件形式自动加载 VDTrace，支持 IL2CPP/BepInEx 应用场景 |
+| **LiteTrace 轻量注入** | 单个 `LiteTrace.dll`，注入后读 `LiteTrace.ini` 按 `trigger_point` 触发并 trace，无 Agent / IPC，支持 step / specified 两种模式 |
+| **模拟快进 (sim fast-forward)** | DR 后端上对确定性直接跳转用 `SimContext` 模拟跳过冗余单步异常，指令仍真实执行，仅省下异常开销 |
 
 ---
 
@@ -55,6 +57,7 @@
 | `vdtrace_autostart.exe` | 自动启动器 CLI，负责插件部署、目标进程启动和等待 trace 完成 |
 | `src/plugins/bepinex/` | IL2CPP/BepInEx 自动加载链路，按激活文件配置拉起 VDTrace |
 | `src/control/loader_session/` | Loader Control IPC，会话发现、Agent 加载请求和加载结果回传 |
+| `LiteTrace.dll` (`src/lite/`) | 轻量进程内追踪器：注入后读 `LiteTrace.ini`、按 `trigger_point` 触发、trace 完毕可结束进程；无 Agent / IPC。发布物料见 `release/LiteTrace/` |
 
 Python/Tkinter legacy GUI/CLI 已下线并删除；协议、配置和控制入口只维护 Flutter GUI、C++ CLI、自动启动和 Loader Control 链路。
 
@@ -167,13 +170,16 @@ depthfilter=outside=2:edge,anon=all:tf,module=TargetModule.dll:all:tf
 | `src/core/extender/` | 扩展分析框架：可插拔事件处理、自定义分析逻辑和输出扩展 |
 | `src/core/heap_peek/` | 堆内存观测：堆操作监控、inline suffix 输出、堆变化追踪 |
 | `src/core/threading/`、`src/core/trigger/`、`src/core/async/` | 线程捕获、触发等待、异步线程接力 |
+| `src/core/sim_fastforward/` | 模拟快进（sim-skip）：DR 后端跳过确定性跳转的单步异常 |
 | `src/core/api/` | C API、DLL 入口和 IPC 基础结构适配 |
 | `src/agent/` | Agent DLL：IPC 服务、Session 管理、模块 Dump+Fix、内存读写 |
 | `src/autostart/` | 自动启动 Helper：INI 解析、IL2CPP/BepInEx 等待、Agent 加载与 configure/start |
 | `src/control/` | 控制端共享层：命名管道通信、DLL 注入、Loader 会话 |
 | `src/tools/vdtrace_ctl/` | IPC CLI 客户端：inject / configure / start / stop / modules / dump / read / write |
 | `src/tools/vdtrace_autostart/` | 自动启动器 CLI：插件部署、目标启动、等待 trace 完成 |
-| `src/tools/examples/` | 控制端示例程序 |
+| `src/lite/` | LiteTrace 轻量注入追踪器：INI 解析、模式（step/specified）、运行时与 DllMain |
+| `src/tools/examples/` | 控制端示例程序、`LiteTrace.ini` 示例配置 |
+| `release/LiteTrace/` | LiteTrace 发布物料：README、配置模板、Windows 构建/打包脚本 |
 | `src/plugins/bepinex/` | BepInEx 插件：IL2CPP/BepInEx 应用自动加载 VDTrace，支持激活文件配置 |
 | `src/flutter_gui/` | Flutter Windows GUI 当前图形控制端，复用 `vdtrace_ctl.exe` 控制 Agent |
 | `src/tests/` | Smoke 回归测试套件 |
@@ -207,6 +213,7 @@ cmd.exe /c "call build_release.bat"
 | `VDTrace.dll` | DLL | 核心引擎动态库版本（导出 C API） |
 | `VDTraceAgent.dll` | DLL | 注入目标进程的追踪代理 |
 | `VDTraceAutoStart.dll` | DLL | 自动启动 Helper |
+| `LiteTrace.dll` | DLL | 轻量进程内追踪器（注入即用，读 `LiteTrace.ini`） |
 | `VDTraceTriggerWaitHelper.dll` | DLL | trigger/root-stop smoke helper |
 | `VDTraceDecryptSmokeHelper.dll` | DLL | decrypt smoke helper |
 | `vdtrace_ctl.exe` | EXE | IPC 命令行客户端 |
@@ -242,6 +249,16 @@ dotnet build src\plugins\bepinex\VDTraceAutoStartPlugin.csproj -c Release
 
 插件产物输出到 `bin\release\bepinex_plugin\`，部署时复制 `VDTraceAutoStartPlugin.dll` 到 BepInEx 插件目录。
 
+### LiteTrace 轻量版发布
+
+一键构建并打包 LiteTrace（配置 CMake + 只构建 `LiteTrace` 目标 + 复制产物到 `dist\`）：
+
+```bat
+release\LiteTrace\build-and-package.bat
+```
+
+产出 `dist\LiteTrace-v<version>\`（含 `LiteTrace.dll` + `LiteTrace.ini` + `README.md`）及同名 `.zip`。也可先 `build_release.bat` 全量构建，再单独跑 `release\LiteTrace\package.ps1` 打包。用法、两种模式（step / specified）与完整配置表见 [`release/LiteTrace/README.md`](release/LiteTrace/README.md)。
+
 ---
 
 ## 当前限制
@@ -252,13 +269,14 @@ dotnet build src\plugins\bepinex\VDTraceAutoStartPlugin.csproj -c Release
 | 间接 call/jmp | 只做基础分类，不保证总能还原目标地址 |
 | VEH 回调开销 | 回调运行在异常处理路径里，逻辑必须尽量轻 |
 | 硬件断点数量 | x86-64 仅 4 个 DR 寄存器，条件跳转需占用 2 个 |
+| LiteTrace 结束点精度 | DR 后端 `end_point` 按控制流边匹配（选边目标）；指令级精度需 `backend = TF` |
 
 ---
 
 ## 仓库提交规则
 
-- 提交范围：`src/`、`include/`、`README.md`、`README_CN.md`、`Task-Status.md`、`.gitignore`、`.clangd`、`NuGet.config`、`CMakeLists.txt`、`build_release.bat`
-- 忽略范围：`bin/`、`obj/`、`docs/`、`tools/`、`ref_pic/`、`backup/`、本地申请素材、索引缓存、`*.ini`、`*.log`、测试产物、构建中间文件
+- 提交范围：`src/`、`include/`、`release/`、`README.md`、`README_CN.md`、`Task-Status.md`、`.gitignore`、`.clangd`、`NuGet.config`、`CMakeLists.txt`、`build_release.bat`
+- 忽略范围：`bin/`、`obj/`、`dist/`、本地申请素材、索引缓存、`*.ini`（`src/tools/examples/LiteTrace.ini` 与 `release/LiteTrace/LiteTrace.ini` 除外）、`*.log`、测试产物、构建中间文件
 
 <div align="center">
 

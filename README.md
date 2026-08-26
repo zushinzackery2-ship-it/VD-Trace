@@ -61,6 +61,8 @@ The project is designed as reusable tracing infrastructure rather than a target-
 | GUI workflow | Flutter Windows GUI for target discovery, Agent loading, module refresh, Dump+Fix, trace control, and output viewing |
 | CLI workflow | Deterministic command-line control through `vdtrace_ctl.exe` and `vdtrace_autostart.exe` |
 | Autostart | BepInEx plugin and activation-file based autostart for IL2CPP/BepInEx application scenarios |
+| LiteTrace | Single inject-and-go `LiteTrace.dll`: reads `LiteTrace.ini`, triggers at `trigger_point`, traces, no Agent/IPC; step / specified modes |
+| Sim fast-forward | DR backend skips redundant single-step exceptions on deterministic direct jumps via `SimContext`; instructions still execute for real |
 
 ---
 
@@ -231,17 +233,20 @@ The autostart path is configuration-driven:
 | `src/core/extender/` | Pluggable event processing and analysis extension layer |
 | `src/core/heap_peek/` | Heap observation support |
 | `src/core/threading/`, `src/core/trigger/`, `src/core/async/` | Thread capture, trigger waiting, async handoff |
+| `src/core/sim_fastforward/` | Simulated fast-forward (sim-skip) for deterministic jumps on the DR backend |
 | `src/core/api/` | DLL entry points and C API integration |
 | `src/agent/` | In-process Agent IPC, module dump, memory access, session management |
 | `src/autostart/` | Autostart helper, config parsing, Agent loading |
 | `src/control/` | Shared control-side IPC, injection, and Loader session support |
 | `src/tools/vdtrace_ctl/` | Main command-line Agent controller |
 | `src/tools/vdtrace_autostart/` | Autostart command-line workflow |
-| `src/tools/examples/` | Example control program |
+| `src/lite/` | LiteTrace lightweight in-process tracer: INI parsing, step/specified modes, runtime, DllMain |
+| `src/tools/examples/` | Example control program and `LiteTrace.ini` sample config |
 | `src/plugins/bepinex/` | BepInEx plugin for autostart activation |
 | `src/flutter_gui/` | Flutter Windows GUI |
 | `src/tests/` | Smoke and workflow regression tests |
 | `src/third_party/zydis/` | Embedded Zydis source used by the build |
+| `release/LiteTrace/` | LiteTrace release assets: README, config template, Windows build/package scripts |
 
 ---
 
@@ -263,6 +268,7 @@ Main Release outputs are generated under `bin\release\`.
 | `VDTrace.dll` | DLL | Core engine dynamic library with exported C API |
 | `VDTraceAgent.dll` | DLL | In-process target Agent |
 | `VDTraceAutoStart.dll` | DLL | Autostart helper |
+| `LiteTrace.dll` | DLL | Lightweight inject-and-go in-process tracer (reads `LiteTrace.ini`) |
 | `VDTraceTriggerWaitHelper.dll` | DLL | Trigger/root-stop smoke helper |
 | `VDTraceDecryptSmokeHelper.dll` | DLL | Decrypt smoke helper |
 | `vdtrace_ctl.exe` | EXE | Agent IPC CLI client |
@@ -296,6 +302,21 @@ dotnet build src\plugins\bepinex\VDTraceAutoStartPlugin.csproj -c Release
 
 The plugin output is placed under `bin\release\bepinex_plugin\`.
 
+### LiteTrace lightweight release
+
+One-click build + package (configures CMake, builds only the `LiteTrace` target,
+copies artifacts into `dist\`):
+
+```bat
+release\LiteTrace\build-and-package.bat
+```
+
+This produces `dist\LiteTrace-v<version>\` (with `LiteTrace.dll`, `LiteTrace.ini`,
+`README.md`) and a matching `.zip`. You can also run `build_release.bat` for a full
+build and then package separately with `release\LiteTrace\package.ps1`. Full usage,
+the two run modes (step / specified), and the config reference are in
+[`release/LiteTrace/README.md`](release/LiteTrace/README.md).
+
 ---
 
 ## Verification
@@ -320,6 +341,7 @@ E:\KDR\flutter\bin\flutter.bat test
 | Indirect calls/jumps | Basic classification is supported, but target reconstruction is not always guaranteed |
 | VEH callback cost | Exception-path logic must remain small and predictable |
 | Hardware breakpoint count | x86-64 provides only four hardware debug registers; conditional branches can consume two |
+| LiteTrace end-point precision | On the DR backend `end_point` matches at control-flow-edge granularity (choose an edge target); use `backend = TF` for instruction-level precision |
 
 ---
 
@@ -337,6 +359,7 @@ Tracked public source/documentation scope:
 
 - `src/`
 - `include/`
+- `release/`
 - `README.md`
 - `README_CN.md`
 - `Task-Status.md`
@@ -346,7 +369,7 @@ Tracked public source/documentation scope:
 - `CMakeLists.txt`
 - `build_release.bat`
 
-Ignored local/generated scope includes build outputs, logs, runtime INI files, IDE metadata, local index caches, and local application-material drafts.
+Ignored local/generated scope includes build outputs (`bin/`, `obj/`, `dist/`), logs, runtime INI files (except the tracked `LiteTrace.ini` templates), IDE metadata, local index caches, and local application-material drafts.
 
 <div align="center">
 
