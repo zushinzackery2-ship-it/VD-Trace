@@ -448,6 +448,48 @@ Windows-side verification still required (release packaging):
 - Confirm `vswhere` discovery works (or the `VSPATH` fallback needs editing for the
   local install).
 
+## hot_bypass default lowered 32 -> 8
+
+Re-evaluated the `hot_bypass` (`idle_escape_threshold`) default after the observation
+that the warm-up hits before bypass are pure overhead (the repeated loop back-edge is
+already deduped by `seen_edges`, so those iterations fault into VEH but log nothing).
+
+Cost model (from `TryArmHotReturnBypass` in `VDTraceHardwareTransitionSupport.cpp`):
+the streak is per `(hot_anchor, call_depth)` and resets on loop exit, so the warm-up
+tax = ~`threshold` VEH round-trips **per loop entry**. For a single flat 1e6-iteration
+loop the threshold is trivial either way (32 vs 8 vs the disastrous ~1e6 at 0). The
+tax bites on **re-entered / nested** loops: an outer loop of 1e4 iterations wrapping a
+hot inner loop pays ~`threshold * 1e4` warm-up faults — 320k at 32 vs 80k at 8.
+
+Decision: lower the default from 32 to **8** (not 4). Rationale:
+- The dominant win (loop runs free after warm-up) is captured at any small threshold;
+  going 32 -> 8 removes ~75% of the warm-up tax, which is the part that actually hurts.
+- The completeness a high threshold buys is marginal (after bypass, intra-loop edge
+  discovery is best-effort regardless), so 32 was paying overhead for little gain.
+- 8 dominates 4: near-identical performance, but 8 still fully traces loops up to 8
+  iterations, so it does not prematurely bypass small 5-8 iteration loops that were
+  cheap to trace fully. 4 would sacrifice those for a negligible extra saving.
+- `0` still disables it; power users can set 4 for max aggression or raise it for more
+  early-iteration coverage.
+
+Unified every default site to 8:
+- Core: `Options::hot_bypass_threshold` (`include/VDTrace/VDTrace.h`).
+- Config structs + parse fallbacks: `LiteTraceConfig.h` / `LiteTraceConfig.cpp`,
+  `VDTraceAutoStartConfig.h` / `VDTraceAutoStartConfig.cpp` (missing-key default `8`).
+- Command default: `vdtrace_ctl` Configure builder (`vdtrace_ctl_command.cpp`).
+- GUI: profile default + serialization fallbacks (`models.dart`, `trace_settings.dart`,
+  `trace_profile.dart`).
+- Templates / examples: LiteTrace default template + `src/tools/examples/LiteTrace.ini`
+  + `release/LiteTrace/LiteTrace.ini`; autostart template + its comment.
+- Docs: `README_CN.md`, `release/LiteTrace/README.md` (table + caveats note).
+- Test: session-smoke `TraceRunOptions` default + the `idle_escape=8` assertion (the
+  bypass still triggers at 8, so `hot_loop_steps < 12000` holds with more margin).
+
+Windows-side verification still required: rebuild + run the session-smoke suite to
+confirm the `hot-loop-bypass` case still suppresses churn and now reports
+`idle_escape=8`, and that lowering to 8 does not regress any trace-completeness
+expectation in the other smoke cases.
+
 ## Conventions honored
 
 - Allman brace style throughout Dart sources.
