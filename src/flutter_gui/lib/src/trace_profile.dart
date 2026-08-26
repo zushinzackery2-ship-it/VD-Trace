@@ -124,7 +124,7 @@ String formatTraceProfile(TraceProfile profile)
     'trace_outside_modules=${profile.traceOutsideModules}',
     'repeat_hits=${profile.repeatHits}',
     'idle_escape_enabled=${profile.idleEscapeEnabled}',
-    'idle_escape_threshold=${profile.idleEscapeThreshold.trim().isEmpty ? '32' : profile.idleEscapeThreshold.trim()}',
+    'idle_escape_threshold=${profile.idleEscapeThreshold.trim().isEmpty ? '8' : profile.idleEscapeThreshold.trim()}',
     'enhanced_sampling=${profile.enhancedSampling}',
     'block_main_thread=${profile.blockMainThread}',
     'root_stop_on_return=${profile.rootStopOnReturn}',

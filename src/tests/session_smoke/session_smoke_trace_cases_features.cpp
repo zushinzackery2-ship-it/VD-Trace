@@ -155,7 +155,7 @@ namespace session_smoke
                 MakeSessionSmokeOptions(&HotLoopEntry, false, true, 4, vdtrace::FlowHitPolicy::FirstSeen, 0, false));
             const uint64_t hot_loop_steps = ParseStateCounter(hot_loop_case.state_text, L"steps=");
             Require(hot_loop_steps < 12000, "hot-loop bypass did not suppress repeated first-hit churn");
-            Require(hot_loop_case.state_text.find(L"idle_escape=32") != std::wstring::npos, "hot-loop bypass state did not expose default idle-escape threshold");
+            Require(hot_loop_case.state_text.find(L"idle_escape=8") != std::wstring::npos, "hot-loop bypass state did not expose default idle-escape threshold");
         }
 
         if (ShouldRunCase(selection, "hot-loop-bypass-disabled"))

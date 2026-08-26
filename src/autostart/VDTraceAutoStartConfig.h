@@ -43,7 +43,7 @@ namespace vdtrace::autostart
         TraceExecutionMode anonymous_exec_execution_mode = TraceExecutionMode::Edge;
         std::wstring module_call_depths;
         FlowHitPolicy hit_policy = FlowHitPolicy::FirstSeen;
-        uint32_t hot_bypass_threshold = 32;
+        uint32_t hot_bypass_threshold = 8;
         bool enhanced_sampling = false;
         bool trigger_enabled = true;
         bool stop_on_root_return = false;

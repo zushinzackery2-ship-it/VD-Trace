@@ -147,7 +147,10 @@ namespace vdtrace
         uint32_t max_call_depth = kUnlimitedCallDepth;
         std::wstring depth_filter_spec;
         FlowHitPolicy hit_policy = FlowHitPolicy::FirstSeen;
-        uint32_t hot_bypass_threshold = 32;
+        // Loop hot-bypass (FirstSeen only): after a loop back-edge repeats this many
+        // times, stop faulting per iteration and let the loop run free to its exit.
+        // Kept low so the per-loop-entry warm-up tax stays small; 0 disables it.
+        uint32_t hot_bypass_threshold = 8;
         bool sim_fast_forward = false;
         bool sim_fast_forward_indirect = false;
         bool enhanced_sampling = false;

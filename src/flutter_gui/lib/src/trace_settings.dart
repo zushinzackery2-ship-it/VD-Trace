@@ -143,7 +143,7 @@ String _renderSettings(TraceProfile profile)
     'all_events': _writeBool((normalizeBackendText(profile.backend).isEmpty ? 'DR' : normalizeBackendText(profile.backend)) == 'TF'),
     'repeat_hits': _writeBool(profile.repeatHits),
     'idle_escape_enabled': _writeBool(profile.idleEscapeEnabled),
-    'idle_escape_threshold': profile.idleEscapeThreshold.trim().isEmpty ? '32' : profile.idleEscapeThreshold.trim(),
+    'idle_escape_threshold': profile.idleEscapeThreshold.trim().isEmpty ? '8' : profile.idleEscapeThreshold.trim(),
     'enhanced_sampling': _writeBool(profile.enhancedSampling),
     'root_stop_on_return': _writeBool(profile.rootStopOnReturn),
     'async_thread_handoff': _writeBool(profile.asyncThreadHandoff),

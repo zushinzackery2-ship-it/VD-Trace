@@ -233,7 +233,7 @@ namespace vdtrace::tools::cli
         command.configure.control_flow_only = 1u;
         command.configure.max_call_depth = vdtrace::kUnlimitedCallDepth;
         command.configure.hit_policy = static_cast<uint32_t>(vdtrace::FlowHitPolicy::FirstSeen);
-        command.configure.hot_bypass_threshold = 32u;
+        command.configure.hot_bypass_threshold = 8u;
         command.configure.enhanced_sampling = 0u;
         command.configure.stop_on_root_return = 0u;
         command.configure.async_thread_handoff = 0u;

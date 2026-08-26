@@ -166,6 +166,6 @@ String buildDepthFilterSummary(
     final tfCount = moduleRules.where((rule) => normalizeExecutionMode(rule.executionMode) == 'TF').length;
     parts.add(tfCount == 0 ? '模块规则=${moduleRules.length}条' : '模块规则=${moduleRules.length}条/$tfCount个TF');
   }
-  parts.add(idleEscapeEnabled ? '空转跳出=${idleEscapeThreshold.trim().isEmpty ? '32' : idleEscapeThreshold.trim()}' : '空转跳出=关闭');
+  parts.add(idleEscapeEnabled ? '空转跳出=${idleEscapeThreshold.trim().isEmpty ? '8' : idleEscapeThreshold.trim()}' : '空转跳出=关闭');
   return parts.join(' | ');
 }

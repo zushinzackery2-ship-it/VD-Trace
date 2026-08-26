@@ -90,7 +90,7 @@ namespace vdtrace::lite
             "max_events = 20000\n"
             "backend = DR\n"
             "all_events = false\n"
-            "idle_escape_threshold = 32\n"
+            "idle_escape_threshold = 8\n"
             "call_depth = 4\n"
             "outside_call_depth = \n"
             "outside_execution_mode = EDGE\n"
