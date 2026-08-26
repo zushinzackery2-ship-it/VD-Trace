@@ -97,7 +97,9 @@ namespace vdtrace::tools
                     return false;
                 }
 
-                const DWORD remaining = static_cast<DWORD>(std::min<ULONGLONG>(deadline - GetTickCount64(), 0xFFFFFFFFull));
+                const ULONGLONG now = GetTickCount64();
+                const ULONGLONG remaining_ms = now < deadline ? deadline - now : 0;
+                const DWORD remaining = static_cast<DWORD>(std::min<ULONGLONG>(remaining_ms, 0xFFFFFFFFull));
                 OVERLAPPED overlapped = {};
                 overlapped.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
                 if (overlapped.hEvent == nullptr)
