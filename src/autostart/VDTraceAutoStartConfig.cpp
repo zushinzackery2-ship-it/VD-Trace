@@ -173,7 +173,7 @@ namespace vdtrace::autostart
         {
             config.trace.max_events = numeric_value;
         }
-        if (detail::ParseAutoStartUint64(detail::GetAutoStartValue(sections, L"trace", L"idle_escape_threshold", L"8"), numeric_value))
+        if (detail::ParseAutoStartUint64(detail::GetAutoStartValue(sections, L"trace", L"idle_escape_threshold", L"0"), numeric_value))
         {
             config.trace.hot_bypass_threshold = static_cast<uint32_t>(std::min<uint64_t>(numeric_value, 0xFFFFFFFFull));
         }

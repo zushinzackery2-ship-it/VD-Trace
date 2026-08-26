@@ -182,7 +182,7 @@ class TraceProfile
     this.traceOutsideModules = false,
     this.allEvents = false,
     this.repeatHits = false,
-    this.idleEscapeEnabled = true,
+    this.idleEscapeEnabled = false,
     this.idleEscapeThreshold = '8',
     this.enhancedSampling = false,
     this.rootStopOnReturn = true,

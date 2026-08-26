@@ -41,7 +41,7 @@ namespace session_smoke
         bool block_main_thread = false;
         bool queue_trigger_threads = false;
         bool async_thread_handoff = false;
-        uint32_t hot_bypass_threshold = 8;
+        uint32_t hot_bypass_threshold = 0;
         bool use_trigger = true;
         std::wstring probe_spec;
         std::wstring depth_filter_spec;

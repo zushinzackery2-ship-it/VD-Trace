@@ -50,7 +50,7 @@ namespace vdtrace::lite
         TraceExecutionMode anonymous_exec_execution_mode = TraceExecutionMode::Edge;
         std::wstring module_call_depths;
         FlowHitPolicy hit_policy = FlowHitPolicy::FirstSeen;
-        uint32_t hot_bypass_threshold = 8;
+        uint32_t hot_bypass_threshold = 0;
         bool sim_fast_forward = false;
         bool sim_fast_forward_indirect = false;
         bool enhanced_sampling = false;

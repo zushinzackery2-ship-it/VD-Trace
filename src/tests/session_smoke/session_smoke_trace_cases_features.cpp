@@ -150,9 +150,11 @@ namespace session_smoke
         if (ShouldRunCase(selection, "hot-loop-bypass"))
         {
             AnnounceSessionSmokeCase("hot-loop-bypass");
+            TraceRunOptions hot_loop_options = MakeSessionSmokeOptions(&HotLoopEntry, false, true, 4, vdtrace::FlowHitPolicy::FirstSeen, 0, false);
+            hot_loop_options.hot_bypass_threshold = 8;
             const TraceCaseResult hot_loop_case = RunTraceCase(
                 L"VDTraceSessionSmokeHotLoop.log",
-                MakeSessionSmokeOptions(&HotLoopEntry, false, true, 4, vdtrace::FlowHitPolicy::FirstSeen, 0, false));
+                hot_loop_options);
             const uint64_t hot_loop_steps = ParseStateCounter(hot_loop_case.state_text, L"steps=");
             Require(hot_loop_steps < 12000, "hot-loop bypass did not suppress repeated first-hit churn");
             Require(hot_loop_case.state_text.find(L"idle_escape=8") != std::wstring::npos, "hot-loop bypass state did not expose default idle-escape threshold");
@@ -178,9 +180,11 @@ namespace session_smoke
         if (ShouldRunCase(selection, "scene-hot-loop-bypass"))
         {
             AnnounceSessionSmokeCase("scene-hot-loop-bypass");
+            TraceRunOptions scene_hot_loop_options = MakeSessionSmokeOptions(&SceneHotLoopEntry, false, true, 4, vdtrace::FlowHitPolicy::FirstSeen, 0, false);
+            scene_hot_loop_options.hot_bypass_threshold = 8;
             const TraceCaseResult scene_hot_loop_case = RunTraceCase(
                 L"VDTraceSessionSmokeSceneHotLoop.log",
-                MakeSessionSmokeOptions(&SceneHotLoopEntry, false, true, 4, vdtrace::FlowHitPolicy::FirstSeen, 0, false));
+                scene_hot_loop_options);
             const uint64_t scene_hot_loop_steps = ParseStateCounter(scene_hot_loop_case.state_text, L"steps=");
             Require(scene_hot_loop_steps < 18000, "scene-shaped hot-loop bypass did not suppress repeated first-hit churn");
             Require(ParseStateCounter(scene_hot_loop_case.state_text, L"events=") != 0, "scene-shaped hot-loop trace produced no events");
@@ -189,9 +193,11 @@ namespace session_smoke
         if (ShouldRunCase(selection, "scene-hot-loop-rootstop"))
         {
             AnnounceSessionSmokeCase("scene-hot-loop-rootstop");
+            TraceRunOptions scene_hot_loop_rootstop_options = MakeSessionSmokeOptions(&SceneHotLoopEntry, false, true, 4, vdtrace::FlowHitPolicy::FirstSeen, 0, true);
+            scene_hot_loop_rootstop_options.hot_bypass_threshold = 8;
             const TraceCaseResult scene_hot_loop_rootstop_case = RunTraceCase(
                 L"VDTraceSessionSmokeSceneHotLoopRootStop.log",
-                MakeSessionSmokeOptions(&SceneHotLoopEntry, false, true, 4, vdtrace::FlowHitPolicy::FirstSeen, 0, true));
+                scene_hot_loop_rootstop_options);
             Require(scene_hot_loop_rootstop_case.auto_stopped, "scene-shaped hot-loop rootstop did not auto-stop");
             const uint64_t scene_hot_loop_rootstop_steps = ParseStateCounter(scene_hot_loop_rootstop_case.state_text, L"steps=");
             Require(scene_hot_loop_rootstop_steps < 18000, "scene-shaped hot-loop rootstop still churned in repeated first-hit loop");

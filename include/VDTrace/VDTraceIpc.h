@@ -62,7 +62,7 @@ namespace vdtrace
         uint32_t control_flow_only = 1;
         uint32_t max_call_depth = kUnlimitedCallDepth;
         uint32_t hit_policy = static_cast<uint32_t>(FlowHitPolicy::FirstSeen);
-        uint32_t hot_bypass_threshold = 8;
+        uint32_t hot_bypass_threshold = 0;
         uint32_t enhanced_sampling = 0;
         uint32_t stop_on_root_return = 0;
         uint32_t async_thread_handoff = 0;

@@ -101,7 +101,7 @@ namespace vdtrace::lite
             {
                 config.max_events = numeric;
             }
-            if (as::ParseAutoStartUint64(as::GetAutoStartValue(sections, L"trace", L"idle_escape_threshold", L"8"), numeric))
+            if (as::ParseAutoStartUint64(as::GetAutoStartValue(sections, L"trace", L"idle_escape_threshold", L"0"), numeric))
             {
                 config.hot_bypass_threshold = static_cast<uint32_t>(std::min<uint64_t>(numeric, 0xFFFFFFFFull));
             }

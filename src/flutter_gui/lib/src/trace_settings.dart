@@ -57,7 +57,7 @@ TraceProfile loadTraceProfile(Directory repoRoot, String agentPath)
   profile.anonymousExecCallDepthEnabled = values.containsKey('anonymous_exec_call_depth_enabled')
       ? _readBool(values, 'anonymous_exec_call_depth_enabled', defaults.anonymousExecCallDepthEnabled)
       : values.containsKey('anonymous_exec_call_depth') && profile.anonymousExecCallDepth.trim().isNotEmpty;
-  profile.idleEscapeEnabled = values.containsKey('idle_escape_enabled') ? _readBool(values, 'idle_escape_enabled', true) : true;
+  profile.idleEscapeEnabled = values.containsKey('idle_escape_enabled') ? _readBool(values, 'idle_escape_enabled', false) : false;
 
   final threadCaptureMode = _readText(values, 'thread_capture_mode', '').trim().toLowerCase();
   if (threadCaptureMode == 'ui_v3_auto_positive')

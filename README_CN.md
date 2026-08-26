@@ -113,7 +113,7 @@ depthfilter=outside=2:edge,anon=all:tf,module=TargetModule.dll:all:tf
 
 ### 热旁路 (Hot Bypass)
 
-当 `hit_policy=first` 下同一条件跳转边被重复命中超过 `hot_bypass_threshold`（默认 8）次时：
+当 `hit_policy=first` 下同一条件跳转边被重复命中超过 `hot_bypass_threshold` 次时（默认关闭，`0`；开启建议设为 `8`）：
 
 1. 计算循环退出地址（fallthrough 或跳转对端）
 2. 将 DR 重编程至退出点
