@@ -6,6 +6,7 @@
 # But allow these
 !/README.md
 !/README_CN.md
+!/Task-Status.md
 !/.gitignore
 !/.clangd
 !/NuGet.config
