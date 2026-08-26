@@ -60,10 +60,19 @@ namespace vdtrace::lite
         bool BuildTraceOptions(const LiteTraceConfig &config, Options &options, std::wstring &output_path, std::wstring &error)
         {
             options = {};
-            options.thread_id = config.thread_id;
-            options.auto_select_thread = config.auto_select_thread;
-            options.block_main_thread = config.block_main_thread;
+
+            // LiteTrace is a pure trigger-point tracer: the hardware breakpoint fires on
+            // whatever thread reaches trigger_point, and that thread is traced. There is
+            // deliberately no thread pinning, thread rotation, main-thread blocking, or
+            // cross-thread handoff - those belong to VDTraceAutoStart / the Agent, not to
+            // the lightweight in-process path. These stay hardcoded to the "current hit
+            // thread" semantics.
+            options.thread_id = 0;
+            options.auto_select_thread = true;
+            options.block_main_thread = false;
             options.queue_trigger_threads = false;
+            options.async_thread_handoff = false;
+
             options.module_names = SplitModuleNames(config.modules);
             output_path = ResolveLiteOutputPath(config);
             options.output_path = output_path;
@@ -73,14 +82,13 @@ namespace vdtrace::lite
             options.control_flow_only = config.control_flow_only;
             options.max_call_depth = config.max_call_depth;
             options.depth_filter_spec = BuildLiteDepthFilterSpec(config);
-                options.hit_policy = config.hit_policy;
-                options.hot_bypass_threshold = config.hot_bypass_threshold;
-                options.sim_fast_forward = config.sim_fast_forward;
-                options.sim_fast_forward_indirect = config.sim_fast_forward_indirect;
-                options.enhanced_sampling = config.enhanced_sampling;
+            options.hit_policy = config.hit_policy;
+            options.hot_bypass_threshold = config.hot_bypass_threshold;
+            options.sim_fast_forward = config.sim_fast_forward;
+            options.sim_fast_forward_indirect = config.sim_fast_forward_indirect;
+            options.enhanced_sampling = config.enhanced_sampling;
             options.probe_spec = config.probe_spec;
             options.stop_on_root_return = config.stop_on_root_return;
-            options.async_thread_handoff = config.async_thread_handoff;
 
             if (config.trigger_enabled && !config.trigger_point.empty())
             {

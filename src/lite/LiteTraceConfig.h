@@ -25,9 +25,6 @@ namespace vdtrace::lite
         std::wstring output_path = L".\\traces\\LiteTrace.log";
         std::wstring trigger_point;
         std::wstring probe_spec;
-        DWORD thread_id = 0;
-        bool auto_select_thread = true;
-        bool block_main_thread = false;
         uint64_t max_events = 0;
         bool trace_outside_modules = false;
         TraceBackend backend = TraceBackend::DrControlFlow;
@@ -47,7 +44,6 @@ namespace vdtrace::lite
         bool enhanced_sampling = false;
         bool trigger_enabled = true;
         bool stop_on_root_return = false;
-        bool async_thread_handoff = true;
 
         // [lite] - LiteTrace specific runtime behaviour.
         bool exit_process_on_finish = false;
