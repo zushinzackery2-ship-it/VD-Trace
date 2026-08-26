@@ -114,7 +114,12 @@ class _VdTraceHomePageState extends State<VdTraceHomePage>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     NavRail(selectedIndex: selectedIndex, onSelected: (index) => setState(() => selectedIndex = index)),
-                    Expanded(child: IndexedStack(index: selectedIndex, children: _pages())),
+                    Expanded(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 180),
+                        child: KeyedSubtree(key: ValueKey(selectedIndex), child: _activePage()),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -125,26 +130,35 @@ class _VdTraceHomePageState extends State<VdTraceHomePage>
     );
   }
 
-  List<Widget> _pages()
+  Widget _activePage()
   {
-    return [
-      CorePage(controller: controller, onRun: _run, onRefresh: _refresh),
-      PolicyPage(controller: controller, onRefresh: _refresh),
-      DepthPage(controller: controller, onRefresh: _refresh),
-      ObserverPage(controller: controller, onRefresh: _refresh),
-      MemoryPage(
-        controller: controller,
-        onRun: _run,
-        addressController: memoryAddressController,
-        sizeController: memorySizeController,
-        valueController: memoryValueController,
-        mode: memoryMode,
-        onModeChanged: (value) => setState(() => memoryMode = value),
-      ),
-      TracePage(controller: controller, onRun: _run, onCopy: _copyText, onExtractAddress: _extractAddressToMemory),
-      LogPage(controller: controller, onRun: _run, onClear: () => setState(controller.clearLog), onCopy: _copyText, onExtractAddress: _extractAddressToMemory),
-      ModulePage(controller: controller, onRun: _run, moduleController: moduleController, onModuleChanged: _selectDumpModule),
-    ];
+    switch (selectedIndex)
+    {
+      case 1:
+        return PolicyPage(controller: controller, onRefresh: _refresh);
+      case 2:
+        return DepthPage(controller: controller, onRefresh: _refresh);
+      case 3:
+        return ObserverPage(controller: controller, onRefresh: _refresh);
+      case 4:
+        return MemoryPage(
+          controller: controller,
+          onRun: _run,
+          addressController: memoryAddressController,
+          sizeController: memorySizeController,
+          valueController: memoryValueController,
+          mode: memoryMode,
+          onModeChanged: (value) => setState(() => memoryMode = value),
+        );
+      case 5:
+        return TracePage(controller: controller, onRun: _run, onCopy: _copyText, onExtractAddress: _extractAddressToMemory);
+      case 6:
+        return LogPage(controller: controller, onRun: _run, onClear: () => setState(controller.clearLog), onCopy: _copyText, onExtractAddress: _extractAddressToMemory);
+      case 7:
+        return ModulePage(controller: controller, onRun: _run, moduleController: moduleController, onModuleChanged: _selectDumpModule);
+      default:
+        return CorePage(controller: controller, onRun: _run, onRefresh: _refresh);
+    }
   }
 
   void _refresh()
