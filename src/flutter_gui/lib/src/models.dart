@@ -257,7 +257,7 @@ String defaultOutputPath(int pid)
 {
   final now = DateTime.now();
   final stamp = '${now.year.toString().padLeft(4, '0')}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
-  return r'.\traces\VDTrace-$pid-' '$stamp.log';
+  return r'.\traces\VDTrace-' '$pid-$stamp.log';
 }
 
 bool isAutoOutputPath(String text, int pid)

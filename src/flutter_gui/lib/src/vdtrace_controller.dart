@@ -13,9 +13,16 @@ import 'trace_preview.dart';
 import 'trace_profile.dart';
 import 'trace_settings.dart';
 
+part 'vdtrace_controller_lifecycle.dart';
 part 'vdtrace_controller_memory.dart';
 part 'vdtrace_controller_modules.dart';
+part 'vdtrace_controller_workflow.dart';
 
+/// Central application state and workflow orchestrator for the VD-Trace GUI.
+///
+/// Owns the Loader IPC bridge, the `vdtrace_ctl` command wrapper, the trace
+/// output preview and the persisted profile. UI widgets observe it through
+/// [ChangeNotifier]. Long-running runtime polling lives in the lifecycle part.
 class VdTraceController extends ChangeNotifier
 {
   VdTraceController({Directory? repoRootOverride, LoaderBridge? loaderBridge, TraceCli? cli, TraceProfile? profile})
@@ -35,6 +42,7 @@ class VdTraceController extends ChangeNotifier
   late TraceProfile profile;
   late String ctlPath;
   late TraceCli cli;
+
   int? selectedPid;
   String statusText = '待机。';
   String previewText = '';
@@ -48,12 +56,18 @@ class VdTraceController extends ChangeNotifier
   bool busy = false;
   bool traceRunning = false;
   bool traceWriting = false;
+
   bool _moduleRefreshPending = false;
+  bool _agentResponsive = false;
+  bool _disposed = false;
+  bool _polling = false;
   Timer? _pollTimer;
   Timer? _saveDebounce;
+  final List<String> _logLines = [];
 
   List<LoaderSessionSnapshot> get sessions => loaderBridge.snapshotSessions();
   List<LoaderLogEntry> get loaderLogs => loaderBridge.snapshotLogs();
+
   LoaderSessionSnapshot? get selectedSession
   {
     final currentSessions = sessions;
@@ -76,6 +90,7 @@ class VdTraceController extends ChangeNotifier
   }
 
   bool get hasTarget => selectedSession != null;
+  bool get agentResponsive => _agentResponsive;
   bool get canLoadAgent => hasTarget && !busy && !traceRunning;
   bool get canRefreshModules => hasTarget && !busy;
   bool get canDumpModule => hasTarget && !busy;
@@ -112,12 +127,13 @@ class VdTraceController extends ChangeNotifier
   void start()
   {
     loaderBridge.start();
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 750), (_) => unawaited(refreshRuntime()));
+    _scheduleNextPoll(immediate: true);
   }
 
   @override
   void dispose()
   {
+    _disposed = true;
     _pollTimer?.cancel();
     _saveDebounce?.cancel();
     loaderBridge.stop();
@@ -125,7 +141,13 @@ class VdTraceController extends ChangeNotifier
     super.dispose();
   }
 
-  void notify() => notifyListeners();
+  void notify()
+  {
+    if (!_disposed)
+    {
+      notifyListeners();
+    }
+  }
 
   void scheduleProfileSave()
   {
@@ -140,9 +162,7 @@ class VdTraceController extends ChangeNotifier
     statusText = session.capabilityText;
     if (session.pid != previousPid)
     {
-      moduleList = '';
-      moduleNames = [];
-      selectedDumpModule = null;
+      _resetTargetState();
       if (isAutoOutputPath(profile.outputPath, previousPid))
       {
         profile.outputPath = '';
@@ -158,9 +178,7 @@ class VdTraceController extends ChangeNotifier
       if (selectedPid != null)
       {
         selectedPid = null;
-        moduleList = '';
-        moduleNames = [];
-        selectedDumpModule = null;
+        _resetTargetState();
         traceRunning = false;
         traceWriting = false;
       }
@@ -182,129 +200,6 @@ class VdTraceController extends ChangeNotifier
     return false;
   }
 
-  Future<void> refreshRuntime() async
-  {
-    syncSessions();
-    await refreshStatus();
-    unawaited(refreshModulesIfAgentOnline());
-    notifyListeners();
-  }
-
-
-  Future<void> refreshStatus() async
-  {
-    final session = selectedSession;
-    if (session == null || session.pid <= 0)
-    {
-      return;
-    }
-    final pid = session.pid;
-    final result = await cli.status(pid);
-    if (result.success)
-    {
-      statusText = formatTraceStatusText(result.message);
-      traceRunning = statusMessageIsRunning(result.message);
-      traceWriting = statusMessageIsWriting(result.message);
-    }
-    else
-    {
-      statusText = result.message;
-      traceRunning = false;
-      traceWriting = false;
-    }
-    final previewResult = preview.refresh(profile.agentPath, profile.outputPath, profile.triggerEnabled ? profile.triggerPoint : '');
-    previewText = previewResult.text;
-    previewStatus = previewResult.status;
-  }
-
-  Future<void> loadAgent() async
-  {
-    final session = _requireSession();
-    await _runAction(() async
-    {
-      if (!await _ensureAgentOnline(session))
-      {
-        return;
-      }
-      await refreshModulesForSession(session, requireAgentOnline: false);
-    });
-  }
-
-  Future<void> refreshModules() async
-  {
-    final session = _requireSession();
-    await _runAction(() async
-    {
-      if (!await _ensureAgentOnline(session))
-      {
-        return;
-      }
-      await refreshModulesForSession(session, requireAgentOnline: false);
-    });
-  }
-
-  Future<void> dumpModule(String moduleName) async
-  {
-    final session = _requireSession();
-    await _runAction(() async
-    {
-      if (!await _ensureAgentOnline(session))
-      {
-        return;
-      }
-      await refreshModulesForSession(session, requireAgentOnline: false);
-      final module = selectDumpModuleByName(moduleName);
-      if (module.isEmpty)
-      {
-        _append('Dump+Fix 失败：Agent 在线但没有返回可用模块。');
-        return;
-      }
-      final result = await cli.dumpModule(session.pid, module);
-      _append(result.message);
-    });
-  }
-
-  Future<void> startTrace() async
-  {
-    final session = _requireSession();
-    await _runAction(() async
-    {
-      if (!await _ensureAgentOnline(session))
-      {
-        return;
-      }
-      final pid = session.pid;
-      if (isAutoOutputPath(profile.outputPath, pid))
-      {
-        profile.outputPath = defaultOutputPath(pid);
-      }
-      final config = buildTraceConfigFromProfile(profile);
-      final configure = await cli.configure(pid, config);
-      if (!configure.success)
-      {
-        _append(configure.message);
-        return;
-      }
-      preview.beginRound(profile.agentPath, profile.outputPath);
-      final started = await cli.start(pid);
-      _append(started.message);
-      saveTraceProfile(repoRoot, profile);
-      await refreshStatus();
-    });
-  }
-
-  Future<void> stopTrace() async
-  {
-    final session = _requireSession();
-    await _runAction(() async
-    {
-      final result = await cli.stop(session.pid);
-      _append(result.message);
-      await refreshStatus();
-    });
-  }
-
-
   LoaderSessionSnapshot _requireSession()
   {
     syncSessions();
@@ -322,6 +217,7 @@ class VdTraceController extends ChangeNotifier
     final online = await cli.ping(session.pid);
     if (online.success)
     {
+      _agentResponsive = true;
       _append('Agent 已在线：${online.message}');
       return true;
     }
@@ -332,10 +228,10 @@ class VdTraceController extends ChangeNotifier
       return false;
     }
     final ready = await cli.waitUntilOnline(session.pid, 5000);
+    _agentResponsive = ready;
     _append(ready ? 'Agent IPC 已上线：${session.displayName}' : '等待 Agent IPC 上线超时：${session.displayName}');
     return ready;
   }
-
 
   Future<void> _runAction(Future<void> Function() action) async
   {
@@ -357,8 +253,16 @@ class VdTraceController extends ChangeNotifier
     finally
     {
       busy = false;
-      notifyListeners();
+      notify();
     }
+  }
+
+  void _resetTargetState()
+  {
+    moduleList = '';
+    moduleNames = [];
+    selectedDumpModule = null;
+    _agentResponsive = false;
   }
 
   void _append(String text)
@@ -371,8 +275,6 @@ class VdTraceController extends ChangeNotifier
     }
     outputLog = _logLines.join('\n');
   }
-
-  final List<String> _logLines = [];
 
   void clearLog()
   {

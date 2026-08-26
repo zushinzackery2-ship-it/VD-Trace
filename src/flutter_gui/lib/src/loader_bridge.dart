@@ -1,11 +1,10 @@
 import 'dart:async';
-import 'dart:ffi';
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:ffi/ffi.dart';
 import 'package:win32/win32.dart';
 
+import 'loader_message_codec.dart';
 import 'loader_pipe_transport.dart';
 import 'models.dart';
 
@@ -116,7 +115,7 @@ class LoaderBridge
   {
     while (_running)
     {
-      final server = _createPipeServer();
+      final server = createPipeServer(pipeName);
       if (server == INVALID_HANDLE_VALUE)
       {
         _appendLog('创建 Loader 控制管道失败，1 秒后重试。');
@@ -211,118 +210,62 @@ class LoaderBridge
     }
   }
 
-  int _createPipeServer()
+  void _handleMessage(_LoaderSessionState state, Uint8List message)
   {
-    final name = pipeName.toNativeUtf16();
-    try
+    final frame = parseLoaderFrame(message);
+    final pid = frame.pid;
+
+    if (frame.kind == loaderMsgAgentHello)
     {
-      return CreateNamedPipe(name, PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, PIPE_UNLIMITED_INSTANCES, 4096, 4096, 0, nullptr);
+      _handleAgentHello(state, pid, frame.payload);
     }
-    finally
+    else if (frame.kind == loaderMsgAgentLog)
     {
-      calloc.free(name);
+      _appendLog('[Loader] pid=$pid ${readAnsiZ(frame.payload, 0, loaderMaxTextChars)}');
+    }
+    else if (frame.kind == loaderMsgLoadDllReply)
+    {
+      _handleLoadDllReply(pid, frame.payload);
     }
   }
 
-  void _handleMessage(_LoaderSessionState state, Uint8List message)
+  void _handleAgentHello(_LoaderSessionState state, int pid, Uint8List payload)
   {
-    final data = ByteData.sublistView(message);
-    final kind = data.getUint32(4, Endian.little);
-    final size = data.getUint32(8, Endian.little);
-    final pid = data.getUint32(12, Endian.little);
-    final payload = message.sublist(messageHeaderSize, size);
-
-    if (kind == loaderMsgAgentHello)
+    final hello = parseAgentHello(payload);
+    final duplicates = _sessions.values.where((existing) => existing.snapshot.pid == pid && existing.snapshot.sessionId != state.snapshot.sessionId).toList();
+    for (final duplicate in duplicates)
     {
-      final processPath = _readUtf16Z(payload, 0, loaderMaxPathChars);
-      final metadataOffset = loaderMaxPathChars * 2;
-      final protocolVersion = payload.length >= metadataOffset + 4 ? ByteData.sublistView(payload).getUint32(metadataOffset, Endian.little) : 0;
-      final featureFlags = payload.length >= metadataOffset + 8 ? ByteData.sublistView(payload).getUint32(metadataOffset + 4, Endian.little) : 0;
-      final duplicates = _sessions.values.where((existing) => existing.snapshot.pid == pid && existing.snapshot.sessionId != state.snapshot.sessionId).toList();
-      for (final duplicate in duplicates)
-      {
-        _sessions.remove(duplicate.snapshot.sessionId);
-        _closeSessionPipe(duplicate);
-      }
-      state.snapshot = LoaderSessionSnapshot(sessionId: state.snapshot.sessionId, pid: pid, processPath: processPath, protocolVersion: protocolVersion, featureFlags: featureFlags, connected: true, helloReceived: true);
-      _appendLog('[已连接] ${state.snapshot.displayName}');
+      _sessions.remove(duplicate.snapshot.sessionId);
+      _closeSessionPipe(duplicate);
     }
-    else if (kind == loaderMsgAgentLog)
-    {
-      _appendLog('[Loader] pid=$pid ${_readAnsiZ(payload, 0, loaderMaxTextChars)}');
-    }
-    else if (kind == loaderMsgLoadDllReply)
-    {
-      _handleLoadDllReply(pid, payload);
-    }
+    state.snapshot = LoaderSessionSnapshot(
+      sessionId: state.snapshot.sessionId,
+      pid: pid,
+      processPath: hello.processPath,
+      protocolVersion: hello.protocolVersion,
+      featureFlags: hello.featureFlags,
+      connected: true,
+      helloReceived: true,
+    );
+    _appendLog('[已连接] ${state.snapshot.displayName}');
   }
 
   void _handleLoadDllReply(int pid, Uint8List payload)
   {
-    if (payload.length < loadDllReplyPayloadSize)
+    final reply = parseLoadDllReply(payload);
+    if (reply == null)
     {
       _appendLog('收到不完整 Loader 加载回复：pid=$pid');
       return;
     }
-    final data = ByteData.sublistView(payload);
-    final status = data.getUint32(0, Endian.little);
-    final win32Error = data.getUint32(4, Endian.little);
-    final path = _readUtf16Z(payload, 8, loaderMaxPathChars);
-    final text = _readUtf16Z(payload, 8 + loaderMaxPathChars * 2, loaderMaxTextChars);
-    if (status == 0)
+    if (reply.ok)
     {
-      _appendLog('[加载成功] pid=$pid 路径=$path');
+      _appendLog('[加载成功] pid=$pid 路径=${reply.path}');
     }
     else
     {
-      _appendLog('[加载失败] pid=$pid 错误=$win32Error 路径=$path 文本=$text');
+      _appendLog('[加载失败] pid=$pid 错误=${reply.win32Error} 路径=${reply.path} 文本=${reply.text}');
     }
-  }
-
-  String _readUtf16Z(Uint8List payload, int byteOffset, int maxChars)
-  {
-    final units = <int>[];
-    for (var index = 0; index < maxChars; index++)
-    {
-      final offset = byteOffset + index * 2;
-      if (offset + 1 >= payload.length)
-      {
-        break;
-      }
-      final unit = payload[offset] | (payload[offset + 1] << 8);
-      if (unit == 0)
-      {
-        break;
-      }
-      units.add(unit);
-    }
-    return String.fromCharCodes(units);
-  }
-
-  String _readAnsiZ(Uint8List payload, int byteOffset, int maxChars)
-  {
-    final bytes = <int>[];
-    for (var index = 0; index < maxChars; index++)
-    {
-      final offset = byteOffset + index;
-      if (offset >= payload.length || payload[offset] == 0)
-      {
-        break;
-      }
-      bytes.add(payload[offset]);
-    }
-    return String.fromCharCodes(bytes);
-  }
-
-  void _closePipe(int pipe)
-  {
-    if (pipe == INVALID_HANDLE_VALUE || pipe == 0)
-    {
-      return;
-    }
-    FlushFileBuffers(pipe);
-    DisconnectNamedPipe(pipe);
-    CloseHandle(pipe);
   }
 
   void _closeSessionPipe(_LoaderSessionState state)
@@ -332,7 +275,7 @@ class LoaderBridge
       return;
     }
     state.closed = true;
-    _closePipe(state.handle);
+    closeServerPipe(state.handle);
   }
 
   void _appendLog(String text)

@@ -38,6 +38,32 @@ void pokePendingPipe(String pipeName)
   }
 }
 
+/// Creates a duplex byte-mode named-pipe server instance for [pipeName].
+int createPipeServer(String pipeName)
+{
+  final name = pipeName.toNativeUtf16();
+  try
+  {
+    return CreateNamedPipe(name, PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, PIPE_UNLIMITED_INSTANCES, 4096, 4096, 0, nullptr);
+  }
+  finally
+  {
+    calloc.free(name);
+  }
+}
+
+/// Flushes, disconnects and closes a server pipe handle, tolerating sentinels.
+void closeServerPipe(int pipe)
+{
+  if (pipe == INVALID_HANDLE_VALUE || pipe == 0)
+  {
+    return;
+  }
+  FlushFileBuffers(pipe);
+  DisconnectNamedPipe(pipe);
+  CloseHandle(pipe);
+}
+
 bool connectPipeBlocking(int pipe)
 {
   final connected = ConnectNamedPipe(pipe, nullptr);
