@@ -1,0 +1,34 @@
+LiteTrace.dll is NOT committed to source control.
+===================================================
+
+This branch tracks source and documentation only (see the whitelist in
+.gitignore), so binary build artifacts such as LiteTrace.dll are never checked
+in. This placeholder just marks where the built DLL belongs inside a release.
+
+How to obtain LiteTrace.dll
+---------------------------
+Build it on Windows with Visual Studio 2022 (x64). The tracing core is
+Windows-only (VEH + hardware debug registers), so it cannot be compiled in the
+Linux CI container that maintains this branch.
+
+Easiest path - one-click build + package:
+
+    release\LiteTrace\build-and-package.bat
+
+That script configures CMake, builds only the LiteTrace target (which pulls in
+VDTraceStatic), and copies the result into:
+
+    dist\LiteTrace-v<version>\
+        LiteTrace.dll
+        LiteTrace.ini
+        README.md
+
+and also produces dist\LiteTrace-v<version>.zip.
+
+Manual path:
+
+    call build_release.bat                 (from the repository root)
+    copy bin\release\LiteTrace.dll  <your release folder>
+
+See README.md in this folder for full usage, the two run modes (step /
+specified), INI reference, and injection notes.

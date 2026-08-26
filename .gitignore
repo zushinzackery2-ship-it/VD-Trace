@@ -14,6 +14,9 @@
 !/build_release.bat
 !/src/
 !/include/
+# LiteTrace release package: docs, config template, and build/package scripts.
+# The built LiteTrace.dll is never committed; it is generated into dist/ (ignored).
+!/release/
 
 # Local application/application-material drafts and indexes
 /.auto-index-mcp/
@@ -39,8 +42,10 @@ Desktop.ini
 # Local/runtime artifacts
 bin/
 obj/
+dist/
 *.ini
 !/src/tools/examples/LiteTrace.ini
+!/release/LiteTrace/LiteTrace.ini
 *.log
 *.tmp
 *.cache
