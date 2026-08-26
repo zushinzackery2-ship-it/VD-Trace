@@ -15,6 +15,17 @@ namespace vdtrace::lite
         TrapFlag = 1,
     };
 
+    // How LiteTrace decides when a trace ends.
+    //   Step      : trigger_point + max_events; end-point config (end_point /
+    //               root_stop_on_return) is ignored.
+    //   Specified : trigger_point + end_point; max_events is forced to 0 (unlimited
+    //               steps) and the step-count config is ignored.
+    enum class LiteMode : uint32_t
+    {
+        Step = 0,
+        Specified = 1,
+    };
+
     struct LiteTraceConfig
     {
         std::filesystem::path config_path;
@@ -24,6 +35,7 @@ namespace vdtrace::lite
         std::wstring modules;
         std::wstring output_path = L".\\traces\\LiteTrace.log";
         std::wstring trigger_point;
+        std::wstring end_point;
         std::wstring probe_spec;
         uint64_t max_events = 0;
         bool trace_outside_modules = false;
@@ -46,6 +58,7 @@ namespace vdtrace::lite
         bool stop_on_root_return = false;
 
         // [lite] - LiteTrace specific runtime behaviour.
+        LiteMode mode = LiteMode::Step;
         bool exit_process_on_finish = false;
     };
 

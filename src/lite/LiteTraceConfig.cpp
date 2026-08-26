@@ -107,9 +107,42 @@ namespace vdtrace::lite
             }
         }
 
-        void ResolveLiteSection(const as::SectionMap &sections, LiteTraceConfig &config)
+        bool ResolveLiteSection(const as::SectionMap &sections, LiteTraceConfig &config, std::wstring &error)
         {
+            const std::wstring mode_text = as::TrimAutoStartText(as::GetAutoStartValue(sections, L"lite", L"mode", L"step"));
+            if (mode_text.empty() || _wcsicmp(mode_text.c_str(), L"step") == 0)
+            {
+                config.mode = LiteMode::Step;
+            }
+            else if (_wcsicmp(mode_text.c_str(), L"specified") == 0)
+            {
+                config.mode = LiteMode::Specified;
+            }
+            else
+            {
+                error = L"lite.mode 只支持 step / specified。";
+                return false;
+            }
+
             config.exit_process_on_finish = as::ParseAutoStartBool(as::GetAutoStartValue(sections, L"lite", L"exit_process_on_finish", L"false"), false);
+            return true;
+        }
+
+        // Force the config to only carry the knobs the selected mode actually uses, so
+        // logging and the mapped Options reflect the effective behaviour.
+        void ApplyLiteMode(LiteTraceConfig &config)
+        {
+            if (config.mode == LiteMode::Specified)
+            {
+                // Specified mode ends at end_point (or root return); step count is off.
+                config.max_events = 0;
+            }
+            else
+            {
+                // Step mode ends after max_events; ignore every end-point knob.
+                config.end_point.clear();
+                config.stop_on_root_return = false;
+            }
         }
     }
 
@@ -142,6 +175,7 @@ namespace vdtrace::lite
         config.modules = as::GetAutoStartValue(sections, L"trace", L"modules", L"");
         config.output_path = as::GetAutoStartValue(sections, L"trace", L"output_path", L".\\traces\\LiteTrace.log");
         config.trigger_point = as::GetAutoStartValue(sections, L"trace", L"trigger_point", L"");
+        config.end_point = as::GetAutoStartValue(sections, L"trace", L"end_point", L"");
         config.probe_spec = as::GetAutoStartValue(sections, L"trace", L"probe_spec", L"");
         config.trace_outside_modules = as::ParseAutoStartBool(as::GetAutoStartValue(sections, L"trace", L"trace_outside_modules", L"false"), false);
         config.enhanced_sampling = as::ParseAutoStartBool(as::GetAutoStartValue(sections, L"trace", L"enhanced_sampling", L"false"), false);
@@ -165,12 +199,17 @@ namespace vdtrace::lite
             return false;
         }
 
-        ResolveLiteSection(sections, config);
+        if (!ResolveLiteSection(sections, config, error))
+        {
+            return false;
+        }
 
         if (!config.trigger_enabled)
         {
             config.trigger_point.clear();
         }
+
+        ApplyLiteMode(config);
 
         return true;
     }

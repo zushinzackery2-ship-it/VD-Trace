@@ -92,7 +92,31 @@ namespace vdtrace::lite
 
             if (config.trigger_enabled && !config.trigger_point.empty())
             {
-                return ParseLiteTriggerPoint(config.trigger_point, options.trigger_module_name, options.trigger_address, error);
+                if (!ParseLiteTriggerPoint(config.trigger_point, options.trigger_module_name, options.trigger_address, error))
+                {
+                    return false;
+                }
+            }
+
+            // Specified mode: end_point becomes the core stop address (execution ends
+            // the moment the traced thread reaches it). Step mode clears end_point in
+            // ApplyLiteMode, so this stays empty there.
+            if (!config.end_point.empty())
+            {
+                if (!ParseLiteTriggerPoint(config.end_point, options.stop_module_name, options.stop_address, error))
+                {
+                    error = L"end_point 无效，格式同 trigger_point (模块+0x偏移 / 模块!0x偏移 / 0x地址)。";
+                    return false;
+                }
+            }
+
+            if (config.mode == LiteMode::Specified
+                && options.stop_module_name.empty()
+                && options.stop_address == 0
+                && !config.stop_on_root_return)
+            {
+                error = L"specified 模式需要 end_point（或 root_stop_on_return）作为结束点。";
+                return false;
             }
 
             return true;
@@ -156,7 +180,10 @@ namespace vdtrace::lite
         const std::wstring trigger_text = options.trigger_module_name.empty() && options.trigger_address == 0
             ? L"(即时)"
             : config.trigger_point;
-        LogLine(log_path, L"trace 已启动，output=" + output_path + L" trigger=" + trigger_text);
+        const std::wstring mode_text = config.mode == LiteMode::Specified
+            ? L"specified end=" + (config.end_point.empty() ? L"root_return" : config.end_point)
+            : L"step max_events=" + std::to_wstring(config.max_events);
+        LogLine(log_path, L"trace 已启动，mode=" + mode_text + L" output=" + output_path + L" trigger=" + trigger_text);
 
         WaitForTraceFinish(session);
         session.Stop(error);
