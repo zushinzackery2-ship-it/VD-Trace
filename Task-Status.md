@@ -231,10 +231,17 @@ tracer with no leftover AutoStart/Agent logic:
   rotate threads, or block the main thread (all AutoStart/Agent-only behaviours).
 - Old INIs that still contain the deleted keys keep working: unknown keys are
   ignored by the parser, so nothing breaks; they simply have no effect.
+- Also removed the unsolicited `[lite]` `finish_timeout_ms` / `poll_interval_ms`
+  keys (a self-added "safety valve" that was never requested). The bootstrap thread
+  now simply polls `Session::IsRunning()` on a fixed 50 ms interval and waits for the
+  trace to actually finish - there is no timeout. The only remaining `[lite]` key is
+  `exit_process_on_finish`. Stop conditions are therefore just: `max_events` reached,
+  or (optionally) `root_stop_on_return`, or the session stopping itself; then the
+  process ends only if `exit_process_on_finish=true`.
 - Kept legitimate trace-scope knobs (`modules`, `call_depth`/depth filters,
   `trace_outside_modules`, `repeat_hits`, `idle_escape_threshold`,
-  `enhanced_sampling`, `probe_spec`, `root_stop_on_return`, `sim_fast_forward*`) and
-  the `[lite]` runtime keys - none of those are thread/agent cruft.
+  `enhanced_sampling`, `probe_spec`, `root_stop_on_return`, `sim_fast_forward*`) -
+  none of those are thread/agent cruft.
 - Linux checks: MinGW `-std=c++20 -municode -Wall -Wextra` syntax-check of all five
   `src/lite` sources passed clean; line-count/brace-balance re-verified (max 192).
 
