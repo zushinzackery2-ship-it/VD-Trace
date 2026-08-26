@@ -36,6 +36,7 @@ set(VDTRACE_CORE_SOURCES
     src/core/decoder/VDTraceDecoderSupport.cpp
     src/core/decoder/VDTraceInstruction.cpp
     src/core/depth_filter/VDTraceDepthFilter.cpp
+    src/core/depth_filter/VDTraceDepthFilterParse.cpp
     src/core/depth_filter/VDTraceDepthFilterResolve.cpp
     src/core/extender/VDTraceExtender.cpp
     src/core/extender/VDTraceExtenderAnalyze.cpp
