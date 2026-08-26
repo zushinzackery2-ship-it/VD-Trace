@@ -97,9 +97,7 @@ namespace vdtrace::lite
             "\n"
             "[lite]\n"
             "; max_events above is the step count. exit_process_on_finish ends the process\n"
-            "; once the trace stops (step count reached or finish_timeout_ms elapsed).\n"
-            "exit_process_on_finish = false\n"
-            "finish_timeout_ms = 0\n"
-            "poll_interval_ms = 50\n";
+            "; once the trace stops (step count reached).\n"
+            "exit_process_on_finish = false\n";
     }
 }

@@ -47,8 +47,6 @@ namespace vdtrace::lite
 
         // [lite] - LiteTrace specific runtime behaviour.
         bool exit_process_on_finish = false;
-        DWORD finish_timeout_ms = 0; // 0 waits indefinitely for the trace to finish.
-        DWORD poll_interval_ms = 50;
     };
 
     std::filesystem::path LiteTraceModuleDirectory();

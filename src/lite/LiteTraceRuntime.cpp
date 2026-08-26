@@ -98,20 +98,11 @@ namespace vdtrace::lite
             return true;
         }
 
-        void WaitForTraceFinish(const Session &session, const LiteTraceConfig &config)
+        void WaitForTraceFinish(const Session &session)
         {
-            const ULONGLONG begin = GetTickCount64();
             while (session.IsRunning())
             {
-                if (config.finish_timeout_ms != 0)
-                {
-                    const ULONGLONG elapsed = GetTickCount64() - begin;
-                    if (elapsed >= config.finish_timeout_ms)
-                    {
-                        break;
-                    }
-                }
-                Sleep(config.poll_interval_ms);
+                Sleep(50);
             }
         }
     }
@@ -167,7 +158,7 @@ namespace vdtrace::lite
             : config.trigger_point;
         LogLine(log_path, L"trace 已启动，output=" + output_path + L" trigger=" + trigger_text);
 
-        WaitForTraceFinish(session, config);
+        WaitForTraceFinish(session);
         session.Stop(error);
 
         const std::wstring summary = session.DescribeState();

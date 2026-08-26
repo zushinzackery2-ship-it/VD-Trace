@@ -110,20 +110,6 @@ namespace vdtrace::lite
         void ResolveLiteSection(const as::SectionMap &sections, LiteTraceConfig &config)
         {
             config.exit_process_on_finish = as::ParseAutoStartBool(as::GetAutoStartValue(sections, L"lite", L"exit_process_on_finish", L"false"), false);
-
-            uint64_t numeric = 0;
-            if (as::ParseAutoStartUint64(as::GetAutoStartValue(sections, L"lite", L"finish_timeout_ms", L"0"), numeric))
-            {
-                config.finish_timeout_ms = static_cast<DWORD>(std::min<uint64_t>(numeric, 0xFFFFFFFFull));
-            }
-            if (as::ParseAutoStartUint64(as::GetAutoStartValue(sections, L"lite", L"poll_interval_ms", L"50"), numeric))
-            {
-                config.poll_interval_ms = static_cast<DWORD>(std::min<uint64_t>(numeric, 0xFFFFFFFFull));
-            }
-            if (config.poll_interval_ms == 0)
-            {
-                config.poll_interval_ms = 50;
-            }
         }
     }
 
