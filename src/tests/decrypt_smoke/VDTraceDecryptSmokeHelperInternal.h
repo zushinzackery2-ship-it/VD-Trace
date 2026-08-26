@@ -8,6 +8,13 @@
 
 namespace decrypt_smoke_helper
 {
+    namespace jit_detail
+    {
+        using DynamicStageFn = void(__fastcall *)(uint8_t *data, size_t size, const uint32_t *round_keys, uint32_t nonce);
+
+        bool BuildDynamicStage(uint8_t *&stage_base, DynamicStageFn &stage);
+    }
+
     BOOL EncryptBuffer(uint8_t *data, size_t size);
     BOOL DecryptBuffer(uint8_t *data, size_t size);
 

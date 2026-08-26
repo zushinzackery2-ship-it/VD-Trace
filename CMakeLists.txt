@@ -172,6 +172,7 @@ set(VDTRACE_DECRYPT_SMOKE_TEST_SOURCES
 
 set(VDTRACE_DECRYPT_HELPER_SOURCES
     src/tests/decrypt_smoke/VDTraceDecryptSmokeHelper.cpp
+    src/tests/decrypt_smoke/VDTraceDecryptSmokeHelperJit.cpp
     src/tests/decrypt_smoke/VDTraceDecryptSmokeHelperRuntime.cpp
 )
 
