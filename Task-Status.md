@@ -125,6 +125,90 @@ Verification done here (Linux container, no MSVC):
   definitions.
 - Logic review of the touched IPC/lifecycle/threading paths.
 
+## Work log — LiteTrace (`src/lite`)
+
+New lightweight, self-contained tracer DLL: inject `LiteTrace.dll`, it reads
+`LiteTrace.ini` by relative path, waits at the configured trigger, records the
+trace, and can end the process afterwards. It is deliberately lighter than
+`VDTraceAutoStart` — no `[launch]`/`[wait]` sections, no game launching, no Agent
+DLL, and no named-pipe IPC.
+
+Architecture:
+
+- Core is reused, not rewritten: `LiteTrace` links `VDTraceStatic` and drives the
+  existing in-process `vdtrace::Session` / `vdtrace::Options` API with a
+  `vdtrace::TextFileRecorder` sink. VEH/DR internals are untouched.
+- INI parsing is reused from autostart: `VDTraceAutoStartConfigText.cpp` (the
+  generic `vdtrace::autostart::detail` trim/read/write/section/bool/uint64/
+  call-depth helpers) is compiled into the `LiteTrace` target and called directly,
+  so there is no second INI parser.
+
+Modules (all Allman, all ≤ 300 lines, in `src/lite/`):
+
+- `LiteTraceConfig.h` — `LiteTraceConfig` struct (the `[trace]` knobs ported from
+  the autostart `[trace]` section / `Options`, plus the `[lite]` runtime knobs) and
+  the public declarations.
+- `LiteTraceConfig.cpp` — `LoadLiteTraceConfig`: writes the default template when
+  the file is missing, parses `[trace]` + `[lite]`, validates backend/call-depth/
+  execution-mode.
+- `LiteTraceConfigParse.cpp` — `SplitModuleNames`, `ParseLiteTriggerPoint`,
+  `BuildLiteDepthFilterSpec`, `ResolveLiteOutputPath`.
+- `LiteTraceConfigText.cpp` — DLL-directory lookup, `DefaultLiteTraceConfigPath`
+  (cwd → DLL directory), and the default INI template text.
+- `LiteTraceRuntime.{h,cpp}` — builds `Options` from the config, opens the
+  recorder, `Session::Configure`/`Start`, polls `Session::IsRunning()` until the
+  trace stops (step count reached, or `finish_timeout_ms` elapsed), `Stop`s, flushes
+  the recorder (destruct drains + `FlushFileBuffers`), then `ExitProcess` when
+  `exit_process_on_finish` is set. Writes a `traces/LiteTrace-<pid>.log` diagnostic.
+- `LiteTraceMain.cpp` — `DllMain(PROCESS_ATTACH)` calls `DisableThreadLibraryCalls`
+  and starts one background bootstrap thread (avoids loader lock). Also exports
+  `vdtrace_lite_bootstrap` for manual triggering. A one-shot atomic guards against
+  double start.
+
+Mandatory config items: `max_events` under `[trace]` is the step count;
+`exit_process_on_finish` under `[lite]` ends the process when the trace finishes.
+
+Products:
+
+- `LiteTrace.dll` — `add_library(LiteTrace SHARED …)` in `CMakeLists.txt`, links
+  `VDTraceStatic`, output to `bin/release`.
+- Example config `src/tools/examples/LiteTrace.ini`.
+
+Trigger contract: `trigger_point` (`Module.dll+0xRVA` / `Module.dll!0xRVA` /
+`0xABSOLUTE`) is parsed into `Options.trigger_module_name` + `Options.trigger_address`
+as a module + **RVA offset** (not a pre-resolved absolute). This matches
+`ResolveTriggerAddress` in `src/core/runtime/VDTraceRuntimeConfig.cpp` (base is added
+at configure time when a module name is present) and the working
+`vdtrace_trigger_wait_test` reference.
+
+`DllMain` note: `VDTraceStatic` also contains a `DllMain` (from
+`src/core/api/VDTraceDllMain.cpp`). `LiteTrace` provides its own `DllMain` as a
+direct target object, so the linker resolves `DllMain` from `LiteTraceMain.obj` and
+never extracts the library's `DllMain` object — no duplicate symbol.
+
+Verification done here (Linux container, no MSVC):
+
+- MinGW-w64 cross toolchain installed; every `src/lite/*.cpp` and the reused
+  `VDTraceAutoStartConfigText.cpp` pass `-fsyntax-only` **and** compile to object
+  code (`-c`, template instantiation of `Session`/`Options`/`TextFileRecorder`
+  succeeds) against the real Win32 headers, C++20, with the project's defines and
+  `-include src/pch.h`.
+- `-Wall -Wextra` clean on all lite sources.
+- Undefined-symbol analysis (`nm -u`) confirms the lite objects reference only the
+  autostart `detail::*` helpers (satisfied by the reused config-text TU in the
+  target) and the public `vdtrace::Session` / `TextFileRecorder` API (satisfied by
+  `VDTraceStatic`) — the CMake linkage is complete, nothing is missing.
+- Line-count and brace-balance checks on every lite file (max 196 lines).
+
+Windows-side verification still required (LiteTrace):
+
+- `cmake --build` the `LiteTrace` target with MSVC `/W4 /permissive-` and confirm it
+  links against `VDTraceStatic` with no duplicate/missing `DllMain` symbol.
+- Inject `LiteTrace.dll` into a target: confirm the INI is found (cwd → DLL folder),
+  the default template is written when missing, the trigger breakpoint arms and
+  fires, `max_events` stops the trace, the log is written, and
+  `exit_process_on_finish` ends the process cleanly after the recorder flushes.
+
 ## Conventions honored
 
 - Allman brace style throughout Dart sources.
