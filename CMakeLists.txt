@@ -182,6 +182,7 @@ set(VDTRACE_TRIGGER_HELPER_SOURCES
 
 set(VDTRACE_TRIGGER_WAIT_SOURCES
     src/tests/trigger_wait/vdtrace_trigger_wait_test.cpp
+    src/tests/trigger_wait/vdtrace_trigger_wait_support.cpp
 )
 
 set(VDTRACE_ROOTSTOP_SOURCES
