@@ -45,6 +45,7 @@ set(VDTRACE_CORE_SOURCES
     src/core/extender/VDTraceExtenderAnalyzeMemory.cpp
     src/core/extender/VDTraceExtenderAnalyzeSim.cpp
     src/core/extender/VDTraceExtenderProcess.cpp
+    src/core/extender/VDTraceExtenderProcessFormat.cpp
     src/core/hardware/VDTraceHardware.cpp
     src/core/hardware/VDTraceHardwareContext.cpp
     src/core/hardware/VDTraceHardwareException.cpp
