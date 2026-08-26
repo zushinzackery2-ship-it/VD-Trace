@@ -209,6 +209,101 @@ Windows-side verification still required (LiteTrace):
   fires, `max_events` stops the trace, the log is written, and
   `exit_process_on_finish` ends the process cleanly after the recorder flushes.
 
+## Simulated fast-forward (sim-skip) for the DR backend
+
+Goal: stop paying a single-step/DR exception on control-flow edges whose outcome is
+already certain, and only fault for real at genuinely uncertain points. This reuses
+the extender `SimContext`/decoder instead of rewriting the VEH core.
+
+New module `src/core/sim_fastforward/` (all files Allman, ≤300 lines):
+
+- `VDTraceSimFastForward.h` — public entry `FastForwardDeterministicFlow`.
+- `VDTraceSimFastForwardInternal.h` — `PredictedJump`, `WalkState`, budget constant,
+  helper declarations.
+- `VDTraceSimFastForward.cpp` — the bounded synchronous walk: seeds an optional
+  `SimContext`, follows deterministic jump edges, buffers predicted edges, and stops
+  at the frontier / cycle / budget / `max_events`.
+- `VDTraceSimFastForwardResolve.cpp` — `TryPlanSkippableJump`: block analysis, the
+  region/probe guards, interior effect replay, and register-indirect resolution with
+  the purity guard.
+- `VDTraceSimFastForwardEmit.cpp` — `EmitPredictedJump`: builds the `Jump` `StepEvent`
+  and routes it through the shared `hardware_transition_detail::ShouldEmitTransition`
+  dedup + module labeling + callback, exactly like a real DR transition.
+
+Integration point: a single pre-pass at the top of `ProgramHardwareObservationImpl`
+(`src/core/hardware/VDTraceHardwareSupport.cpp`), the one choke point that arms the
+next DR observation. When `options.sim_fast_forward` is set it advances `entry` to the
+frontier and emits the predicted edges; the existing arming logic then arms real
+hardware on the frontier block. Nothing else in the VEH/DR core changed.
+
+Why it is correct-by-construction (verified against the code, not just asserted):
+
+- Only unconditional `Jump` edges are skipped. Their target is either encoded in the
+  instruction (`jmp rel/imm`) or, with `sim_fast_forward_indirect`, computed purely in
+  registers (`jmp reg`, guarded by `SimContext.known` + a "no memory read / no
+  unmodeled instruction" window flag). In both cases the CPU is guaranteed to follow
+  the predicted target, so arming the later frontier cannot diverge.
+- The CPU still executes every skipped instruction natively — no register/memory
+  writeback is performed. Only the redundant per-jump exceptions are removed.
+- `ApplyHardwareContextObservations` rebuilds `Dr7`/`Dr6` from scratch each arm, so no
+  stale breakpoint exists at a skipped intermediate target.
+- `UpdateCallStackForTransition` is a no-op for `Jump`, so predicted jumps never
+  disturb the shadow call stack / depth.
+- Conditional branches, calls, returns, indirect-through-memory, syscalls, interrupts,
+  truncated blocks, value-probe ranges, TF-filter/system/untracked targets, and any
+  unknown register all remain frontiers → they fault for real exactly as today.
+
+Toggles (both default off, so the mode is a strict no-op unless enabled):
+
+- `Options::sim_fast_forward` — direct-jump chain skipping (zero misprediction risk).
+- `Options::sim_fast_forward_indirect` — additionally resolve register-indirect jumps
+  via `SimContext` (provably equal to the CPU result under the purity guard; flagged
+  for Windows validation because a misprediction there would mean silent trace loss,
+  not a crash).
+
+Config wiring: exposed through the in-process LiteTrace INI (`[trace]` keys
+`sim_fast_forward`, `sim_fast_forward_indirect`) — the path that maps an INI directly
+onto `Options`. The Agent IPC `Configure` wire format was intentionally left unchanged
+(adding these to autostart/GUI would require a protocol field; noted below).
+
+Relationship to `hot_bypass`: complementary, not overlapping. `hot_bypass` drops a
+*hot repeated* data-dependent edge (loop back-edge) after it has faulted
+`hot_bypass_threshold` times and re-arms at the loop exit — reactive, count-based,
+`FirstSeen`-only. Fast-forward drops a *statically certain* edge on the first
+encounter, no repetition needed. Both continue to run: fast-forward removes the
+"known" edges up front, `hot_bypass` still handles the "unknown-but-repetitive" ones.
+
+Linux-side verification performed:
+
+- Line-count + brace-balance on all five new files (max 149 lines).
+- MinGW-w64 (`x86_64-w64-mingw32-g++ -std=c++20 -municode -Wall -Wextra`) compiled all
+  three new `.cpp` to object files and the modified `VDTraceHardwareSupport.cpp`,
+  clean. `LiteTraceConfig*.cpp` / `LiteTraceRuntime.cpp` re-checked with the new keys.
+- `nm -uC` on the new objects: the only undefined `vdtrace::*` symbols are the
+  extender `detail` (`InitializeContext`/`ApplyInstructionEffects`/`ReadRegister`/
+  `DecodeFullInstruction`), the hardware helpers (`AnalyzeBasicBlock`,
+  `FindModuleRange`, `HasValueProbeInRange`, `ResolveExecutionModeForAddress`,
+  `CaptureThreadContext`) and `hardware_transition_detail::ShouldEmitTransition` /
+  `ResetSuppressedTransitionState` — all provided by `VDTraceStatic`. No new deps.
+
+Windows-side verification still required (sim fast-forward):
+
+- MSVC `/W4 /permissive-` build + link of `VDTraceStatic`/`VDTrace` with the new module.
+- Functional: with `sim_fast_forward=true` on a DR (`control_flow_only`) trace, confirm
+  the recorded jump edges match a baseline (`sim_fast_forward=false`) run exactly
+  (same source/target/order under `FirstSeen`), while the DR exception count drops on
+  jump-heavy/flattened code. Predicted jump events legitimately carry an invalid
+  `thread_context` (no live snapshot); confirm downstream consumers tolerate that
+  (the recorder's extended per-block memory analysis already gates on
+  `entry_context.valid`).
+- With `sim_fast_forward_indirect=true`, validate on code containing register-indirect
+  jumps that the resolved targets match actual execution and no trace divergence/stall
+  occurs; keep it off until validated.
+- Follow-up (not done here): thread `sim_fast_forward*` through the Agent IPC
+  `Configure` payload + autostart `[trace]` + GUI so non-LiteTrace launch paths can
+  toggle it. This needs an IPC protocol field, so it was deferred to avoid changing
+  the stable wire format.
+
 ## Conventions honored
 
 - Allman brace style throughout Dart sources.
