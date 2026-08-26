@@ -209,6 +209,35 @@ Windows-side verification still required (LiteTrace):
   fires, `max_events` stops the trace, the log is written, and
   `exit_process_on_finish` ends the process cleanly after the recorder flushes.
 
+### LiteTrace minimalism audit (thread/async knobs removed)
+
+Reviewed the full `src/lite/` flow to confirm LiteTrace is a pure trigger-point
+tracer with no leftover AutoStart/Agent logic:
+
+- The path is already Agent/IPC/launch/wait free: `RunLiteTrace` reads the INI,
+  builds `vdtrace::Options`, and drives `Session::Configure/Start` directly. No
+  Agent DLL, no named-pipe IPC, no `[launch]`/`[wait]` sections.
+- Removed the redundant thread-selection / cross-thread knobs from the LiteTrace
+  config struct, parser, default template, and example INI:
+  `thread_id`, `auto_select_thread`, `block_main_thread`, `async_thread_handoff`.
+  Checked against the core `Start`/`Configure`: with a trigger set,
+  `auto_select_thread` + `thread_id=0` is exactly the "trace whichever thread hit
+  the breakpoint" mode (the core even forces `thread_id=0` in that case), so the
+  knobs were pure noise for a pure-breakpoint tracer.
+- `BuildTraceOptions` now hardcodes the lightweight semantics:
+  `thread_id=0`, `auto_select_thread=true`, `block_main_thread=false`,
+  `queue_trigger_threads=false`, `async_thread_handoff=false`. LiteTrace traces the
+  single thread that reaches `trigger_point` and does not chase spawned threads,
+  rotate threads, or block the main thread (all AutoStart/Agent-only behaviours).
+- Old INIs that still contain the deleted keys keep working: unknown keys are
+  ignored by the parser, so nothing breaks; they simply have no effect.
+- Kept legitimate trace-scope knobs (`modules`, `call_depth`/depth filters,
+  `trace_outside_modules`, `repeat_hits`, `idle_escape_threshold`,
+  `enhanced_sampling`, `probe_spec`, `root_stop_on_return`, `sim_fast_forward*`) and
+  the `[lite]` runtime keys - none of those are thread/agent cruft.
+- Linux checks: MinGW `-std=c++20 -municode -Wall -Wextra` syntax-check of all five
+  `src/lite` sources passed clean; line-count/brace-balance re-verified (max 192).
+
 ## Simulated fast-forward (sim-skip) for the DR backend
 
 Goal: stop paying a single-step/DR exception on control-flow edges whose outcome is
