@@ -59,6 +59,7 @@ namespace vdtrace
         std::unordered_set<FlowEdgeKey, FlowEdgeKeyHash> seen_edges;
         uintptr_t configured_trigger_address = 0;
         uintptr_t resolved_trigger_address = 0;
+        uintptr_t resolved_stop_address = 0;
         uint32_t call_depth_offset = 0;
         uint32_t root_call_depth_base = 0;
         uintptr_t last_rip = 0;
@@ -116,6 +117,7 @@ namespace vdtrace
 
     std::wstring FormatWin32Error(const wchar_t *prefix, DWORD error);
     bool ResolveTriggerAddress(const Options &options, uintptr_t &resolved_address, std::wstring &error);
+    bool ResolveStopAddress(const Options &options, uintptr_t &resolved_address, std::wstring &error);
     bool ParseProbeSpec(const std::wstring &text, std::vector<ResolvedValueProbe> &probes, std::wstring &error);
     bool ParseDepthFilterSpec(
         const std::wstring &text,

@@ -153,6 +153,11 @@ namespace vdtrace
         bool enhanced_sampling = false;
         std::wstring trigger_module_name;
         uintptr_t trigger_address = 0;
+        // Optional end point: when execution reaches this address the session stops.
+        // stop_address is an RVA when stop_module_name is set, otherwise an absolute
+        // address. Left at 0 with an empty module name it is disabled (the default).
+        std::wstring stop_module_name;
+        uintptr_t stop_address = 0;
         std::wstring probe_spec;
         bool stop_on_root_return = false;
         bool async_thread_handoff = false;

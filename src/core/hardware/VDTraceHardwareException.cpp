@@ -269,7 +269,18 @@ namespace vdtrace
             }
         }
 
-        if (impl.options.max_events > 0 && impl.event_count.load() >= impl.options.max_events)
+        // End point reached: the fault landed on the configured stop address (an edge
+        // target in DR mode). The arriving edge has already been recorded above, so we
+        // just disarm and end the session. Takes priority over max_events.
+        if (impl.resolved_stop_address != 0 && current_rip == impl.resolved_stop_address)
+        {
+            SnapshotExecutionSummary(impl);
+            impl.running.store(false);
+            impl.observation_state = ObservationState::Idle;
+            uintptr_t empty[4] = {};
+            ApplyHardwareContextObservations(*context, empty, 0, false);
+        }
+        else if (impl.options.max_events > 0 && impl.event_count.load() >= impl.options.max_events)
         {
             SnapshotExecutionSummary(impl);
             impl.running.store(false);

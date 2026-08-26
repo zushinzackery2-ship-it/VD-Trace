@@ -21,6 +21,24 @@ namespace vdtrace
         return true;
     }
 
+    bool ResolveStopAddress(const Options &options, uintptr_t &resolved_address, std::wstring &error)
+    {
+        resolved_address = options.stop_address;
+        if (options.stop_module_name.empty())
+        {
+            return true;
+        }
+
+        ModuleRange stop_range = {};
+        if (!ResolveModuleRange(options.stop_module_name, stop_range, error))
+        {
+            return false;
+        }
+
+        resolved_address = stop_range.base + options.stop_address;
+        return true;
+    }
+
     size_t DetermineSeenEdgeReserve(const Options &options)
     {
         constexpr size_t kDefaultReserve = 65536;

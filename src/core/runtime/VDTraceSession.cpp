@@ -203,6 +203,15 @@ namespace vdtrace
         {
             out << L" capture=thread";
         }
+        out << L" stop=";
+        if (resolved_stop_address == 0)
+        {
+            out << L"off";
+        }
+        else
+        {
+            out << L"0x" << std::hex << resolved_stop_address << std::dec;
+        }
         out << L" root_stop=" << (options.stop_on_root_return ? 1 : 0)
             << L" handoff=" << (options.async_thread_handoff ? 1 : 0)
             << L" sample=" << (options.enhanced_sampling ? 1 : 0)

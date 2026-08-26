@@ -84,6 +84,10 @@ namespace vdtrace
             return false;
         }
         configured_trigger_address = resolved_trigger_address;
+        if (!ResolveStopAddress(options, resolved_stop_address, error))
+        {
+            return false;
+        }
         if (!ParseProbeSpec(options.probe_spec, value_probes, error))
         {
             return false;

@@ -191,7 +191,17 @@ namespace vdtrace
             return EXCEPTION_CONTINUE_EXECUTION;
         }
 
-        if (should_emit && ShouldAutoStopOnRootReturn(impl, decode_result.kind, call_depth))
+        // End point reached: the next instruction to execute is the configured stop
+        // address, so we stop before running it (the transition into it is already
+        // recorded). Takes priority over root-return / max_events.
+        if (impl.resolved_stop_address != 0 && current_rip == impl.resolved_stop_address)
+        {
+            SnapshotExecutionSummary(impl);
+            impl.running.store(false);
+            impl.last_rip_valid = false;
+            context->EFlags &= ~0x100u;
+        }
+        else if (should_emit && ShouldAutoStopOnRootReturn(impl, decode_result.kind, call_depth))
         {
             std::wstring rotate_error;
             if (RotateQueuedTriggerTrace(impl, context, rotate_error))
