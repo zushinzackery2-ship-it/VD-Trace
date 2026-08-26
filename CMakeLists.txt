@@ -102,6 +102,7 @@ set(VDTRACE_AGENT_SOURCES
     src/agent/VDTraceAgentIpc.cpp
     src/agent/VDTraceAgentIpcSupport.cpp
     src/agent/VDTraceAgentMemory.cpp
+    src/agent/VDTraceAgentMemoryFormat.cpp
     src/agent/VDTraceAgentMemorySupport.cpp
     src/agent/VDTraceAgentState.cpp
     src/agent/VDTraceAgentStateSupport.cpp
