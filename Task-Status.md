@@ -397,6 +397,57 @@ Windows-side verification still required (sim fast-forward):
   toggle it. This needs an IPC protocol field, so it was deferred to avoid changing
   the stable wire format.
 
+## Project tidy + LiteTrace release packaging
+
+Tidy pass over the `experimental` branch (structure + doc alignment, no functional
+code deleted — the BepInEx plugin and every CMake target are intentional and stay):
+
+- Documented what was previously undocumented so the top-level docs match the tree:
+  added `LiteTrace` (`src/lite/`, `LiteTrace.dll`) and the sim fast-forward module
+  (`src/core/sim_fastforward/`) to both `README.md` and `README_CN.md` — feature
+  summary, entry points, source layout, build-products table, a build/release
+  subsection, and the limitations table (DR vs TF end-point precision).
+- Aligned the repository-policy text with the actual `.gitignore`: it now lists
+  `release/` as tracked and `bin/`/`obj/`/`dist/` as ignored, and drops the stale
+  `docs/ tools/ ref_pic/ backup/` names that no longer exist. Noted the two tracked
+  `LiteTrace.ini` templates as explicit exceptions to the global `*.ini` ignore.
+
+LiteTrace release package (source-of-truth committed; the binary is built on
+Windows and never committed):
+
+- `release/LiteTrace/README.md` — full Chinese usage guide + English brief: what
+  LiteTrace is, differences vs VDTrace/AutoStart, the two modes (step / specified)
+  with INI examples, injection + directory placement, `trigger_point`/`end_point`
+  format, a complete `[trace]`/`[lite]` config table, notes (DR vs TF end-point
+  precision, fixed thread semantics, no timeout, relative paths), Windows/VS2022
+  build steps, and known limitations.
+- `release/LiteTrace/LiteTrace.ini` — ready-to-edit config template (mirrors the
+  canonical `src/tools/examples/LiteTrace.ini`; release default
+  `exit_process_on_finish = false`).
+- `release/LiteTrace/PLACEHOLDER-LiteTrace.dll.txt` — marks where the built DLL goes
+  and how to produce it (binaries are not committed on this branch).
+- `release/LiteTrace/build-and-package.bat` — one-click Windows build: locates VS2022
+  via `vswhere` (fallback to an editable `VSPATH`), CMake configure, builds only the
+  `LiteTrace` target (pulls in `VDTraceStatic`), then calls the packager.
+- `release/LiteTrace/package.ps1` — stages `LiteTrace.dll` + `LiteTrace.ini` +
+  `README.md` (and `VDTrace.dll` if present) into `dist\LiteTrace-v<version>\` and
+  zips it; errors clearly if the DLL has not been built yet.
+- `.gitignore` — whitelist-style repo, so added `!/release/`, `dist/`, and
+  `!/release/LiteTrace/LiteTrace.ini`. Verified with `git check-ignore` that all five
+  release files are tracked and that `dist/` stays ignored.
+
+Linux-side verification performed:
+
+- `git check-ignore` on every intended release file — none ignored; `dist/` confirmed
+  ignored. Scripts are text-only; no compilation involved. READMEs are docs only.
+
+Windows-side verification still required (release packaging):
+
+- Run `release\LiteTrace\build-and-package.bat` on a VS2022 x64 machine and confirm it
+  produces `bin\release\LiteTrace.dll` and stages `dist\LiteTrace-v0.1.0\` + the zip.
+- Confirm `vswhere` discovery works (or the `VSPATH` fallback needs editing for the
+  local install).
+
 ## Conventions honored
 
 - Allman brace style throughout Dart sources.
